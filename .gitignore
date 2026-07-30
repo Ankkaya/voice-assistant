@@ -4,6 +4,10 @@
 .pytest_cache/
 __pycache__/
 *.py[cod]
+.coverage
+.DS_Store
+.idea/
+*.iml
 .dart_tool/
 build/
 .flutter-plugins
