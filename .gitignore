@@ -1,0 +1,11 @@
+.env
+.python-deps/
+.venv/
+.pytest_cache/
+__pycache__/
+*.py[cod]
+.dart_tool/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+

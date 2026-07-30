@@ -1,0 +1,10 @@
+fastapi==0.141.1
+uvicorn==0.52.0
+httpx==0.28.1
+pydantic-settings==2.14.2
+langchain-core==1.5.2
+langchain-openai==1.4.1
+langsmith==0.10.12
+pytest==8.4.2
+pytest-asyncio==1.4.0
+pytest-httpx==0.35.0

@@ -84,10 +84,10 @@ Use this dependency set in `server/requirements.txt`:
 
 ```text
 fastapi>=0.115,<1
-uvicorn[standard]>=0.30,<1
+uvicorn>=0.30,<1
 httpx>=0.27,<1
 pydantic-settings>=2.6,<3
-langchain>=1,<2
+langchain-core>=1,<2
 langchain-openai>=1,<2
 pytest>=8.3,<9
 pytest-asyncio>=0.24,<2
