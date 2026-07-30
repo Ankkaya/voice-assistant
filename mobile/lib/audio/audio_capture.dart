@@ -52,7 +52,6 @@ class AudioCapture {
 
   Future<void> dispose() async {
     await stop();
-    _recorder.dispose();
+    await _recorder.dispose();
   }
 }
-

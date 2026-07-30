@@ -19,8 +19,10 @@ class CallController extends StateNotifier<CallViewState> {
   StreamSubscription<Uint8List>? _audioSubscription;
   Timer? _elapsedTimer;
   final _assistantAudio = StreamController<Uint8List>.broadcast();
+  final _processedEvents = StreamController<VoiceEvent>.broadcast();
 
   Stream<Uint8List> get assistantAudio => _assistantAudio.stream;
+  Stream<VoiceEvent> get processedEvents => _processedEvents.stream;
 
   Future<void> connect(Uri uri) async {
     state = state.copyWith(phase: CallPhase.connecting, clearError: true);
@@ -86,6 +88,7 @@ class CallController extends StateNotifier<CallViewState> {
       case PongEvent():
         break;
     }
+    _processedEvents.add(event);
   }
 
   void onSocketError(Object error, [StackTrace? stackTrace]) {
@@ -151,6 +154,7 @@ class CallController extends StateNotifier<CallViewState> {
     unawaited(_audioSubscription?.cancel());
     unawaited(_socket.close());
     unawaited(_assistantAudio.close());
+    unawaited(_processedEvents.close());
     super.dispose();
   }
 }
