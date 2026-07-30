@@ -1,0 +1,17 @@
+[
+  {
+    "id": "labrador_captain",
+    "name": "拉布拉多队长",
+    "subtitle": "勇敢又温暖的探险伙伴",
+    "avatar": "assets/characters/labrador_captain.svg",
+    "themeColor": "#E7A93B"
+  },
+  {
+    "id": "ryder",
+    "name": "莱德",
+    "subtitle": "乐于助人的救援队长",
+    "avatar": "assets/characters/ryder.svg",
+    "themeColor": "#E64B4B"
+  }
+]
+

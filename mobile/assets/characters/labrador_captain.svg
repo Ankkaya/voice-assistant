@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="原创拉布拉多队长头像">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFF1B8"/>
+      <stop offset="1" stop-color="#FFD06B"/>
+    </linearGradient>
+  </defs>
+  <circle cx="128" cy="128" r="124" fill="url(#bg)"/>
+  <path d="M65 83C30 75 24 116 47 146c10 13 26 2 34-13z" fill="#9C6428"/>
+  <path d="M191 83c35-8 41 33 18 63-10 13-26 2-34-13z" fill="#9C6428"/>
+  <path d="M65 105c0-47 28-73 63-73s63 26 63 73v51c0 43-30 72-63 72s-63-29-63-72z" fill="#D99A47"/>
+  <path d="M88 70c12-21 28-30 40-30 18 0 34 10 43 28-19-7-59-7-83 2z" fill="#315C89"/>
+  <path d="M82 69h92l-8-24H91z" fill="#3E78B2"/>
+  <circle cx="101" cy="119" r="9" fill="#2A2119"/>
+  <circle cx="155" cy="119" r="9" fill="#2A2119"/>
+  <circle cx="98" cy="116" r="3" fill="#FFF"/>
+  <circle cx="152" cy="116" r="3" fill="#FFF"/>
+  <ellipse cx="128" cy="151" rx="35" ry="28" fill="#F1C27D"/>
+  <path d="M115 144c0-10 26-10 26 0 0 7-6 12-13 12s-13-5-13-12z" fill="#39271D"/>
+  <path d="M106 169c13 12 31 12 44 0" fill="none" stroke="#6F3F27" stroke-width="6" stroke-linecap="round"/>
+  <path d="M84 205c27 27 61 28 88 0l-5 32H89z" fill="#315C89"/>
+  <circle cx="128" cy="213" r="13" fill="#F1C84B" stroke="#FFF" stroke-width="4"/>
+</svg>
+
