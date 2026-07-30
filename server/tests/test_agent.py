@@ -65,4 +65,3 @@ async def test_agent_sanitizes_model_output(registry):
 
     assert "http" not in result
     assert "**" not in result
-

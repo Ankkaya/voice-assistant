@@ -66,4 +66,3 @@ class SafetyGuard:
             if len(normalized) < max_characters and normalized[-1:] not in "。！？":
                 normalized += "。"
         return normalized
-

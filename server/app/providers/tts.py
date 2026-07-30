@@ -141,4 +141,3 @@ class XiaomiTtsProvider:
             raise ProviderError("tts", "UPSTREAM_UNAVAILABLE")
         if status_code >= 400:
             raise ProviderError("tts", "UPSTREAM_REJECTED")
-

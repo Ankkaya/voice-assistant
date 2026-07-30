@@ -33,4 +33,3 @@ def pcm16le_duration_seconds(
     if sample_rate <= 0 or channels <= 0:
         raise ValueError("sample rate and channels must be positive")
     return len(pcm) / (sample_rate * channels * 2)
-

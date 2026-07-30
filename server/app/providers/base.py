@@ -17,4 +17,3 @@ class ProviderError(Exception):
 class ProviderConfigError(ProviderError):
     def __init__(self, stage: str, code: str = "INVALID_CONFIGURATION") -> None:
         super().__init__(stage, code, recoverable=False)
-

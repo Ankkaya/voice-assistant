@@ -147,4 +147,3 @@ def create_app(injected: AppDependencies | None = None) -> FastAPI:
 
 
 app = create_app()
-

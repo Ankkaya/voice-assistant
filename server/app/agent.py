@@ -91,4 +91,3 @@ def build_chat_model(settings: Settings) -> BaseChatModel:
         timeout=15.0,
         max_retries=0,
     )
-

@@ -60,4 +60,3 @@ async def test_mimo_asr_maps_authentication_error(httpx_mock):
             await provider.transcribe(b"RIFFfake-wave")
     assert error.value.code == "AUTHENTICATION_FAILED"
     assert "bad key" not in str(error.value)
-

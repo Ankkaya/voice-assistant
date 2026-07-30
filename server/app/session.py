@@ -273,4 +273,3 @@ class VoiceSession:
             await self.close("time_limit")
         except asyncio.CancelledError:
             raise
-

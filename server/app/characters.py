@@ -27,4 +27,3 @@ class CharacterRegistry:
 
     def all(self) -> tuple[CharacterConfig, ...]:
         return tuple(self._characters.values())
-

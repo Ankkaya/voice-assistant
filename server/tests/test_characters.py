@@ -43,4 +43,3 @@ def test_registry_rejects_duplicate_ids(tmp_path):
     )
     with pytest.raises(ValidationError):
         CharacterRegistry.from_path(source)
-

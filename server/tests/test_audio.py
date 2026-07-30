@@ -24,4 +24,3 @@ def test_odd_pcm_payload_is_rejected():
 
 def test_duration_uses_sample_rate_and_channels():
     assert pcm16le_duration_seconds(b"\x00\x00" * 16000) == pytest.approx(1.0)
-

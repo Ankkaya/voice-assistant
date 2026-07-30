@@ -76,4 +76,3 @@ class XiaomiAsrProvider:
         if not text:
             raise ProviderError("asr", "EMPTY_RESULT")
         return text
-

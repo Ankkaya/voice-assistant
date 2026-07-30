@@ -49,4 +49,3 @@ def test_turn_error_contains_only_stable_fields():
         )
     )
     assert set(body) == {"type", "stage", "code", "recoverable", "message"}
-

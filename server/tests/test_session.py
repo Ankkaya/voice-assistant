@@ -174,4 +174,3 @@ async def test_close_clears_audio_and_history(make_session):
     assert session.state is SessionState.ENDED
     assert session.history == []
     assert session.buffered_audio_bytes == 0
-

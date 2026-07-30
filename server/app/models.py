@@ -56,4 +56,3 @@ class CharacterCollection(BaseModel):
         if len(ids) != len(set(ids)):
             raise ValueError("character IDs must be unique")
         return self
-

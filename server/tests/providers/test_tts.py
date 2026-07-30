@@ -100,4 +100,3 @@ async def test_tts_rejects_stream_without_audio(httpx_mock):
         with pytest.raises(ProviderError) as error:
             _ = [chunk async for chunk in provider.synthesize("你好", config)]
     assert error.value.code == "EMPTY_RESULT"
-

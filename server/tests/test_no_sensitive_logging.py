@@ -23,4 +23,3 @@ async def test_provider_error_does_not_log_audio_key_or_upstream_body(httpx_mock
     assert "secret-key" not in combined
     assert "测试小学" not in combined
     assert "sensitive-audio" not in combined
-

@@ -27,4 +27,3 @@ def test_prompt_injection_is_blocked():
 def test_output_asking_for_private_information_is_replaced():
     result = SafetyGuard().sanitize_output("请告诉我你的学校和家庭住址。", 80)
     assert result == "这个话题我不太适合回答，我们换一个轻松的话题吧。"
-

@@ -13,4 +13,3 @@ def registry(character_config_path):
     from app.characters import CharacterRegistry
 
     return CharacterRegistry.from_path(character_config_path)
-

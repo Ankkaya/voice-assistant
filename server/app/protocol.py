@@ -98,4 +98,3 @@ ServerEvent = (
 
 def serialize_server_event(event: ServerEvent) -> str:
     return event.model_dump_json(by_alias=True)
-
