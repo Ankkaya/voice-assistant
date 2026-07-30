@@ -39,7 +39,10 @@ const character = Character(
 
 void main() {
   test('microphone is disabled while assistant speaks', () {
-    final controller = CallController(character: character, socket: FakeVoiceSocket());
+    final controller = CallController(
+      character: character,
+      socket: FakeVoiceSocket(),
+    );
 
     controller.onEvent(const AssistantAudioStart(turnId: 'greeting'));
 
@@ -49,7 +52,10 @@ void main() {
   });
 
   test('audio end enables listening', () {
-    final controller = CallController(character: character, socket: FakeVoiceSocket());
+    final controller = CallController(
+      character: character,
+      socket: FakeVoiceSocket(),
+    );
     controller.onEvent(const AssistantAudioStart(turnId: 'greeting'));
 
     controller.onEvent(const AssistantAudioEnd(turnId: 'greeting'));
@@ -77,5 +83,21 @@ void main() {
     expect(controller.state.phase, CallPhase.processing);
     controller.dispose();
   });
-}
 
+  test('ignores assistant audio events for a stale turn', () {
+    final controller = CallController(
+      character: character,
+      socket: FakeVoiceSocket(),
+    );
+    controller.onEvent(const AssistantAudioStart(turnId: 'greeting'));
+    controller.onEvent(const AssistantAudioEnd(turnId: 'greeting'));
+    controller.startUserTurn('turn_2');
+    controller.commitUserTurn();
+
+    controller.onEvent(const AssistantAudioStart(turnId: 'turn_1'));
+
+    expect(controller.state.phase, CallPhase.processing);
+    expect(controller.state.currentTurnId, 'turn_2');
+    controller.dispose();
+  });
+}

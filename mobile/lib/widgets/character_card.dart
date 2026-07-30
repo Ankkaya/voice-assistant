@@ -52,15 +52,15 @@ class CharacterCard extends StatelessWidget {
                       Text(
                         character.name,
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.w800,
-                            ),
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
                       const SizedBox(height: 6),
                       Text(
                         character.subtitle,
                         style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                              color: const Color(0xFF606575),
-                            ),
+                          color: const Color(0xFF606575),
+                        ),
                       ),
                       const SizedBox(height: 12),
                       Row(
@@ -88,4 +88,3 @@ class CharacterCard extends StatelessWidget {
     );
   }
 }
-

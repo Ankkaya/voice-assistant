@@ -35,8 +35,13 @@ class VoiceSocket implements VoiceSocketClient {
   Future<void> connect(Uri uri) async {
     await _closeConnection();
     final channel = WebSocketChannel.connect(uri);
-    await channel.ready.timeout(const Duration(seconds: 8));
     _channel = channel;
+    try {
+      await channel.ready.timeout(const Duration(seconds: 8));
+    } on Object {
+      await _closeConnection();
+      rethrow;
+    }
     _lastReceived = DateTime.now();
     _subscription = channel.stream.listen(
       _onMessage,
@@ -49,7 +54,8 @@ class VoiceSocket implements VoiceSocketClient {
       cancelOnError: false,
     );
     _heartbeat = Timer.periodic(const Duration(seconds: 15), (_) {
-      if (DateTime.now().difference(_lastReceived) > const Duration(seconds: 30)) {
+      if (DateTime.now().difference(_lastReceived) >
+          const Duration(seconds: 30)) {
         _events.addError(TimeoutException('Voice socket heartbeat timed out'));
         unawaited(_closeConnection());
         return;
@@ -120,4 +126,3 @@ class VoiceSocketClosed implements Exception {
   @override
   String toString() => 'Voice socket closed';
 }
-

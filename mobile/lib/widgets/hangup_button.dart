@@ -28,4 +28,3 @@ class HangupButton extends StatelessWidget {
     );
   }
 }
-

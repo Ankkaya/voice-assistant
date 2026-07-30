@@ -48,4 +48,3 @@ class CharacterRepository {
 final charactersProvider = FutureProvider<List<Character>>((ref) {
   return const CharacterRepository().load();
 });
-

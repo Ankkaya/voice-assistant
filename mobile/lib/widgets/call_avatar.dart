@@ -14,7 +14,8 @@ class CallAvatar extends StatefulWidget {
   State<CallAvatar> createState() => _CallAvatarState();
 }
 
-class _CallAvatarState extends State<CallAvatar> with SingleTickerProviderStateMixin {
+class _CallAvatarState extends State<CallAvatar>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
   late final Animation<double> _scale;
 
@@ -25,9 +26,10 @@ class _CallAvatarState extends State<CallAvatar> with SingleTickerProviderStateM
       vsync: this,
       duration: const Duration(milliseconds: 900),
     );
-    _scale = Tween<double>(begin: 0.98, end: 1.04).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _scale = Tween<double>(
+      begin: 0.98,
+      end: 1.04,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
     _syncAnimation();
   }
 
@@ -65,7 +67,10 @@ class _CallAvatarState extends State<CallAvatar> with SingleTickerProviderStateM
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           color: Colors.white.withValues(alpha: 0.16),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.42), width: 3),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.42),
+            width: 3,
+          ),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.14),
@@ -79,4 +84,3 @@ class _CallAvatarState extends State<CallAvatar> with SingleTickerProviderStateM
     );
   }
 }
-

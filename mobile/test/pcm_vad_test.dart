@@ -24,10 +24,7 @@ void main() {
   test('includes pre-roll and commits after 800ms silence', () {
     final vad = PcmVad();
     feed(vad, 200, 0);
-    final actions = <VadAction>[
-      ...feed(vad, 400, 6000),
-      ...feed(vad, 800, 0),
-    ];
+    final actions = <VadAction>[...feed(vad, 400, 6000), ...feed(vad, 800, 0)];
 
     expect(actions.whereType<SpeechStart>(), hasLength(1));
     expect(actions.whereType<SpeechCommit>(), hasLength(1));
@@ -37,10 +34,7 @@ void main() {
 
   test('discards speech shorter than 300ms', () {
     final vad = PcmVad();
-    final actions = <VadAction>[
-      ...feed(vad, 200, 6000),
-      ...feed(vad, 200, 0),
-    ];
+    final actions = <VadAction>[...feed(vad, 200, 6000), ...feed(vad, 200, 0)];
 
     expect(actions.whereType<SpeechStart>(), isEmpty);
     expect(actions.whereType<VadDiscard>(), hasLength(1));
@@ -55,10 +49,6 @@ void main() {
   });
 
   test('rejects an incomplete PCM16 sample', () {
-    expect(
-      () => PcmVad().process(Uint8List(1)),
-      throwsA(isA<ArgumentError>()),
-    );
+    expect(() => PcmVad().process(Uint8List(1)), throwsA(isA<ArgumentError>()));
   });
 }
-

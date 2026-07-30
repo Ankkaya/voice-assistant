@@ -4,31 +4,31 @@ sealed class VoiceEvent {
   factory VoiceEvent.fromJson(Map<String, dynamic> json) {
     return switch (json['type']) {
       'session.ready' => SessionReady(
-          sessionId: json['sessionId'] as String,
-          maxDurationSeconds: (json['maxDurationSeconds'] as int?) ?? 600,
-        ),
+        sessionId: json['sessionId'] as String,
+        maxDurationSeconds: (json['maxDurationSeconds'] as int?) ?? 600,
+      ),
       'user.transcript' => UserTranscript(
-          turnId: json['turnId'] as String,
-          text: json['text'] as String,
-        ),
+        turnId: json['turnId'] as String,
+        text: json['text'] as String,
+      ),
       'assistant.thinking' => AssistantThinking(
-          turnId: json['turnId'] as String,
-        ),
+        turnId: json['turnId'] as String,
+      ),
       'assistant.audio.start' => AssistantAudioStart(
-          turnId: json['turnId'] as String,
-          encoding: json['encoding'] as String,
-          sampleRate: json['sampleRate'] as int,
-          channels: json['channels'] as int,
-        ),
+        turnId: json['turnId'] as String,
+        encoding: json['encoding'] as String,
+        sampleRate: json['sampleRate'] as int,
+        channels: json['channels'] as int,
+      ),
       'assistant.audio.end' => AssistantAudioEnd(
-          turnId: json['turnId'] as String,
-        ),
+        turnId: json['turnId'] as String,
+      ),
       'turn.error' => TurnErrorEvent(
-          stage: json['stage'] as String,
-          code: json['code'] as String,
-          recoverable: json['recoverable'] as bool,
-          message: json['message'] as String,
-        ),
+        stage: json['stage'] as String,
+        code: json['code'] as String,
+        recoverable: json['recoverable'] as bool,
+        message: json['message'] as String,
+      ),
       'pong' => PongEvent(timestamp: json['timestamp'] as int),
       final type => throw FormatException('Unknown voice event: $type'),
     };
@@ -36,7 +36,10 @@ sealed class VoiceEvent {
 }
 
 final class SessionReady extends VoiceEvent {
-  const SessionReady({required this.sessionId, required this.maxDurationSeconds});
+  const SessionReady({
+    required this.sessionId,
+    required this.maxDurationSeconds,
+  });
   final String sessionId;
   final int maxDurationSeconds;
 }
@@ -92,25 +95,24 @@ final class PongEvent extends VoiceEvent {
 
 abstract final class VoiceClientEvent {
   static Map<String, Object> sessionStart(String characterId) => {
-        'type': 'session.start',
-        'characterId': characterId,
-      };
+    'type': 'session.start',
+    'characterId': characterId,
+  };
 
   static Map<String, Object> audioStart(String turnId) => {
-        'type': 'input.audio.start',
-        'turnId': turnId,
-      };
+    'type': 'input.audio.start',
+    'turnId': turnId,
+  };
 
   static Map<String, Object> audioCommit(String turnId) => {
-        'type': 'input.audio.commit',
-        'turnId': turnId,
-      };
+    'type': 'input.audio.commit',
+    'turnId': turnId,
+  };
 
   static Map<String, Object> sessionEnd() => {'type': 'session.end'};
 
   static Map<String, Object> ping(int timestamp) => {
-        'type': 'ping',
-        'timestamp': timestamp,
-      };
+    'type': 'ping',
+    'timestamp': timestamp,
+  };
 }
-

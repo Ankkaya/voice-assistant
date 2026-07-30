@@ -9,12 +9,11 @@ import '../websocket/voice_socket.dart';
 import 'call_state.dart';
 
 class CallController extends StateNotifier<CallViewState> {
-  CallController({required this.character, required VoiceSocketClient socket})
-      : _socket = socket,
-        super(const CallViewState());
+  CallController({required this.character, required this.socket})
+    : super(const CallViewState());
 
   final Character character;
-  final VoiceSocketClient _socket;
+  final VoiceSocketClient socket;
   StreamSubscription<VoiceEvent>? _eventSubscription;
   StreamSubscription<Uint8List>? _audioSubscription;
   Timer? _elapsedTimer;
@@ -23,13 +22,14 @@ class CallController extends StateNotifier<CallViewState> {
 
   Stream<Uint8List> get assistantAudio => _assistantAudio.stream;
   Stream<VoiceEvent> get processedEvents => _processedEvents.stream;
+  CallViewState get viewState => state;
 
   Future<void> connect(Uri uri) async {
     state = state.copyWith(phase: CallPhase.connecting, clearError: true);
     Object? lastError;
     for (var attempt = 0; attempt < 2; attempt++) {
       try {
-        await _socket.connect(uri);
+        await socket.connect(uri);
         lastError = null;
         break;
       } on Object catch (error) {
@@ -40,14 +40,17 @@ class CallController extends StateNotifier<CallViewState> {
       }
     }
     if (lastError != null) {
-      state = state.copyWith(phase: CallPhase.error, errorMessage: '无法接通，请稍后再试');
+      state = state.copyWith(
+        phase: CallPhase.error,
+        errorMessage: '无法接通，请稍后再试',
+      );
       return;
     }
 
-    _eventSubscription = _socket.events.listen(onEvent, onError: onSocketError);
-    _audioSubscription = _socket.audioChunks.listen(_assistantAudio.add);
+    _eventSubscription = socket.events.listen(onEvent, onError: onSocketError);
+    _audioSubscription = socket.audioChunks.listen(_assistantAudio.add);
     state = state.copyWith(phase: CallPhase.ringing);
-    _socket.sendEvent(VoiceClientEvent.sessionStart(character.id));
+    socket.sendEvent(VoiceClientEvent.sessionStart(character.id));
   }
 
   void onEvent(VoiceEvent event) {
@@ -57,16 +60,15 @@ class CallController extends StateNotifier<CallViewState> {
         state = state.copyWith(phase: CallPhase.ringing);
         break;
       case UserTranscript(:final turnId):
-        if (_isCurrentTurn(turnId)) {
-          state = state.copyWith(phase: CallPhase.processing);
-        }
+        if (!_matchesActiveTurn(turnId)) return;
+        state = state.copyWith(phase: CallPhase.processing);
         break;
       case AssistantThinking(:final turnId):
-        if (_isCurrentTurn(turnId)) {
-          state = state.copyWith(phase: CallPhase.processing);
-        }
+        if (!_matchesActiveTurn(turnId)) return;
+        state = state.copyWith(phase: CallPhase.processing);
         break;
       case AssistantAudioStart(:final turnId):
+        if (!_matchesActiveTurn(turnId)) return;
         state = state.copyWith(
           phase: CallPhase.assistantSpeaking,
           currentTurnId: turnId,
@@ -74,9 +76,8 @@ class CallController extends StateNotifier<CallViewState> {
         );
         break;
       case AssistantAudioEnd(:final turnId):
-        if (_isCurrentTurn(turnId)) {
-          state = state.copyWith(phase: CallPhase.listening, clearTurnId: true);
-        }
+        if (!_matchesActiveTurn(turnId)) return;
+        state = state.copyWith(phase: CallPhase.listening, clearTurnId: true);
         break;
       case TurnErrorEvent(:final recoverable, :final message):
         state = state.copyWith(
@@ -97,27 +98,30 @@ class CallController extends StateNotifier<CallViewState> {
 
   void startUserTurn(String turnId) {
     if (state.phase != CallPhase.listening) return;
-    state = state.copyWith(phase: CallPhase.userSpeaking, currentTurnId: turnId);
-    _socket.sendEvent(VoiceClientEvent.audioStart(turnId));
+    state = state.copyWith(
+      phase: CallPhase.userSpeaking,
+      currentTurnId: turnId,
+    );
+    socket.sendEvent(VoiceClientEvent.audioStart(turnId));
   }
 
   void sendUserAudio(Uint8List audio) {
     if (state.phase == CallPhase.userSpeaking) {
-      _socket.sendAudio(audio);
+      socket.sendAudio(audio);
     }
   }
 
   void commitUserTurn() {
     final turnId = state.currentTurnId;
     if (state.phase != CallPhase.userSpeaking || turnId == null) return;
-    _socket.sendEvent(VoiceClientEvent.audioCommit(turnId));
+    socket.sendEvent(VoiceClientEvent.audioCommit(turnId));
     state = state.copyWith(phase: CallPhase.processing);
   }
 
   Future<void> hangUp() async {
     if (state.phase != CallPhase.ended) {
       try {
-        _socket.sendEvent(VoiceClientEvent.sessionEnd());
+        socket.sendEvent(VoiceClientEvent.sessionEnd());
       } on StateError {
         // The socket may already be closed.
       }
@@ -128,14 +132,22 @@ class CallController extends StateNotifier<CallViewState> {
 
   Future<void> onLifecyclePaused() => hangUp();
 
-  bool _isCurrentTurn(String turnId) {
+  bool _matchesActiveTurn(String turnId) {
     final current = state.currentTurnId;
-    return current == null || current == turnId || turnId == 'greeting' || turnId == 'goodbye';
+    if (turnId == 'greeting') {
+      return current == null || current == turnId;
+    }
+    if (turnId == 'goodbye') {
+      return true;
+    }
+    return current == turnId;
   }
 
   void _startElapsedTimer() {
     _elapsedTimer ??= Timer.periodic(const Duration(seconds: 1), (_) {
-      state = state.copyWith(elapsed: state.elapsed + const Duration(seconds: 1));
+      state = state.copyWith(
+        elapsed: state.elapsed + const Duration(seconds: 1),
+      );
     });
   }
 
@@ -144,7 +156,7 @@ class CallController extends StateNotifier<CallViewState> {
     _elapsedTimer = null;
     await _eventSubscription?.cancel();
     await _audioSubscription?.cancel();
-    await _socket.close();
+    await socket.close();
   }
 
   @override
@@ -152,7 +164,7 @@ class CallController extends StateNotifier<CallViewState> {
     _elapsedTimer?.cancel();
     unawaited(_eventSubscription?.cancel());
     unawaited(_audioSubscription?.cancel());
-    unawaited(_socket.close());
+    unawaited(socket.close());
     unawaited(_assistantAudio.close());
     unawaited(_processedEvents.close());
     super.dispose();

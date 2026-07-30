@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:typed_data';
-import 'dart:ui' show FontFeature;
 
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
@@ -52,12 +51,13 @@ class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _ownsController = widget.controller == null;
-    _controller = widget.controller ??
+    _controller =
+        widget.controller ??
         CallController(character: widget.character, socket: VoiceSocket());
     _capture = AudioCapture();
     _vad = PcmVad();
     _player = PcmAudioPlayer();
-    _viewState = _controller.state;
+    _viewState = _controller.viewState;
     _removeStateListener = _controller.addListener((state) {
       if (mounted) setState(() => _viewState = state);
     });
@@ -73,9 +73,9 @@ class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
   Future<void> _connect() async {
     if (!await _capture.hasPermission()) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('需要麦克风权限才能打电话')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('需要麦克风权限才能打电话')));
       Navigator.of(context).pop();
       return;
     }
@@ -93,7 +93,7 @@ class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
       case AssistantAudioEnd():
         _audioWork = _audioWork.then((_) async {
           await _player.finish();
-          if (_controller.state.phase == CallPhase.listening) {
+          if (_controller.viewState.phase == CallPhase.listening) {
             await _startListening();
           }
         });
@@ -109,8 +109,9 @@ class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
   }
 
   Future<void> _startListening() async {
-    if (_ending || _captureSubscription != null ||
-        _controller.state.phase != CallPhase.listening) {
+    if (_ending ||
+        _captureSubscription != null ||
+        _controller.viewState.phase != CallPhase.listening) {
       return;
     }
     _vad.reset();
@@ -209,7 +210,10 @@ class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
                   ),
                 ),
                 const Spacer(),
-                CallAvatar(character: widget.character, phase: _viewState.phase),
+                CallAvatar(
+                  character: widget.character,
+                  phase: _viewState.phase,
+                ),
                 const SizedBox(height: 38),
                 AnimatedSwitcher(
                   duration: const Duration(milliseconds: 200),
@@ -255,8 +259,11 @@ class _MicrophoneStatus extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(active ? Icons.mic_rounded : Icons.mic_off_rounded,
-              color: Colors.white, size: 19),
+          Icon(
+            active ? Icons.mic_rounded : Icons.mic_off_rounded,
+            color: Colors.white,
+            size: 19,
+          ),
           const SizedBox(width: 7),
           Text(
             active ? '麦克风正在聆听' : '麦克风已暂停',

@@ -4,7 +4,8 @@ import 'dart:typed_data';
 import 'package:record/record.dart';
 
 class AudioCapture {
-  AudioCapture({AudioRecorder? recorder}) : _recorder = recorder ?? AudioRecorder();
+  AudioCapture({AudioRecorder? recorder})
+    : _recorder = recorder ?? AudioRecorder();
 
   static const sampleRate = 16000;
   static const channels = 1;

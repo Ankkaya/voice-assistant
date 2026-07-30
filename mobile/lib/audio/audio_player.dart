@@ -3,7 +3,8 @@ import 'dart:typed_data';
 import 'package:flutter_sound/flutter_sound.dart';
 
 class PcmAudioPlayer {
-  PcmAudioPlayer({FlutterSoundPlayer? player}) : _player = player ?? FlutterSoundPlayer();
+  PcmAudioPlayer({FlutterSoundPlayer? player})
+    : _player = player ?? FlutterSoundPlayer();
 
   final FlutterSoundPlayer _player;
   final List<Uint8List> _pending = [];
@@ -38,7 +39,7 @@ class PcmAudioPlayer {
       await _startStream();
       return;
     }
-    _player.uint8ListSink?.add(bytes);
+    await _player.feedUint8FromStream(bytes);
   }
 
   Future<void> finish() async {
@@ -53,10 +54,11 @@ class PcmAudioPlayer {
       numChannels: 1,
       sampleRate: _sampleRate,
       interleaved: true,
+      bufferSize: 4096,
     );
     _streamStarted = true;
     for (final chunk in _pending) {
-      _player.uint8ListSink?.add(chunk);
+      await _player.feedUint8FromStream(chunk);
     }
     _pending.clear();
     _pendingBytes = 0;
@@ -79,4 +81,3 @@ class PcmAudioPlayer {
     }
   }
 }
-

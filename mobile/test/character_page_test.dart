@@ -11,4 +11,3 @@ void main() {
     expect(find.text('莱德'), findsOneWidget);
   });
 }
-

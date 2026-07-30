@@ -21,9 +21,9 @@ class CharacterPage extends ConsumerWidget {
               Text(
                 '想给谁打电话？',
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.w900,
-                      color: const Color(0xFF252A3A),
-                    ),
+                  fontWeight: FontWeight.w900,
+                  color: const Color(0xFF252A3A),
+                ),
               ),
               const SizedBox(height: 8),
               const Text(
@@ -48,7 +48,8 @@ class CharacterPage extends ConsumerWidget {
                       );
                     },
                   ),
-                  loading: () => const Center(child: CircularProgressIndicator()),
+                  loading: () =>
+                      const Center(child: CircularProgressIndicator()),
                   error: (_, __) => const Center(child: Text('角色加载失败')),
                 ),
               ),
@@ -59,4 +60,3 @@ class CharacterPage extends ConsumerWidget {
     );
   }
 }
-

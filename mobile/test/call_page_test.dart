@@ -36,7 +36,10 @@ const character = Character(
 
 void main() {
   testWidgets('only exposes hangup during a call', (tester) async {
-    final controller = CallController(character: character, socket: PageTestSocket());
+    final controller = CallController(
+      character: character,
+      socket: PageTestSocket(),
+    );
     controller.onEvent(const AssistantAudioStart(turnId: 'greeting'));
     controller.onEvent(const AssistantAudioEnd(turnId: 'greeting'));
 
@@ -56,4 +59,3 @@ void main() {
     controller.dispose();
   });
 }
-

@@ -22,4 +22,3 @@ class VoiceCallApp extends StatelessWidget {
     );
   }
 }
-

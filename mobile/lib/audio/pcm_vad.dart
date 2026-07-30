@@ -102,7 +102,9 @@ class PcmVad {
     }
 
     if (_candidateSilence >= 5) {
-      for (final bytes in _candidate.skip(math.max(0, _candidate.length - preRollFrames))) {
+      for (final bytes in _candidate.skip(
+        math.max(0, _candidate.length - preRollFrames),
+      )) {
         _remember(bytes);
       }
       _candidate.clear();
@@ -154,4 +156,3 @@ class PcmVad {
     _speakingFrames = 0;
   }
 }
-
