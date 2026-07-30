@@ -8,3 +8,4 @@ langsmith==0.10.12
 pytest==8.4.2
 pytest-asyncio==1.4.0
 pytest-httpx==0.35.0
+websockets==17.0
