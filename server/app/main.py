@@ -1,11 +1,11 @@
 import logging
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import httpx
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 
 from .agent import LangChainAgent, build_chat_model
@@ -16,6 +16,7 @@ from .providers.asr import XiaomiAsrProvider
 from .providers.tts import XiaomiTtsProvider
 from .safety import SafetyGuard
 from .session import VoiceSession
+from .voice_references import MAX_REFERENCE_BYTES, VoiceReferenceStore
 
 
 logger = logging.getLogger(__name__)
@@ -28,6 +29,7 @@ class AppDependencies:
     agent: Any | None
     tts: Any | None
     ready: bool
+    reference_store: VoiceReferenceStore = field(default_factory=VoiceReferenceStore)
 
 
 class WebSocketTransport:
@@ -97,6 +99,43 @@ def create_app(injected: AppDependencies | None = None) -> FastAPI:
             return JSONResponse({"status": "not_ready"}, status_code=503)
         return {"status": "ready"}
 
+    @app.post("/api/voice-references", status_code=201)
+    async def upload_voice_reference(file: UploadFile = File(...)):
+        filename = file.filename or "reference"
+        suffix = Path(filename).suffix.lower()
+        mime_by_suffix = {".wav": "audio/wav", ".mp3": "audio/mpeg"}
+        mime_type = mime_by_suffix.get(suffix)
+        if mime_type is None:
+            raise HTTPException(400, "Only WAV and MP3 reference audio is supported")
+        content = await file.read(MAX_REFERENCE_BYTES + 1)
+        await file.close()
+        if not content:
+            raise HTTPException(400, "Reference audio is empty")
+        if len(content) > MAX_REFERENCE_BYTES:
+            raise HTTPException(413, "Reference audio exceeds 10 MB")
+        is_wav = mime_type == "audio/wav" and (
+            len(content) >= 12
+            and content.startswith(b"RIFF")
+            and content[8:12] == b"WAVE"
+        )
+        is_mp3 = mime_type == "audio/mpeg" and (
+            content.startswith(b"ID3")
+            or (
+                len(content) >= 2
+                and content[0] == 0xFF
+                and content[1] & 0xE0 == 0xE0
+            )
+        )
+        if not (is_wav or is_mp3):
+            raise HTTPException(400, "Reference audio content is invalid")
+        dependencies: AppDependencies = app.state.dependencies
+        reference_id = dependencies.reference_store.put(content, mime_type)
+        return {
+            "referenceId": reference_id,
+            "fileName": filename,
+            "sizeBytes": len(content),
+        }
+
     @app.websocket("/ws/voice")
     async def voice_socket(websocket: WebSocket) -> None:
         await websocket.accept()
@@ -120,6 +159,7 @@ def create_app(injected: AppDependencies | None = None) -> FastAPI:
             agent=dependencies.agent,
             tts=dependencies.tts,
             transport=transport,
+            reference_store=dependencies.reference_store,
         )
         try:
             while True:

@@ -23,4 +23,16 @@ void main() {
       throwsA(isA<FormatException>()),
     );
   });
+
+  test('session start includes per-call voice design configuration', () {
+    final event = VoiceClientEvent.sessionStart('ryder', {
+      'mode': 'voice_design',
+      'voiceDescription': '明亮自信的少年队长声音',
+    });
+
+    expect(event['voiceConfig'], {
+      'mode': 'voice_design',
+      'voiceDescription': '明亮自信的少年队长声音',
+    });
+  });
 }

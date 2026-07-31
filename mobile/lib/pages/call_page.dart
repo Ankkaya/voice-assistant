@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:typed_data';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
@@ -7,25 +8,32 @@ import 'package:uuid/uuid.dart';
 import '../audio/audio_capture.dart';
 import '../audio/audio_player.dart';
 import '../audio/pcm_vad.dart';
+import '../audio/ringtone_player.dart';
 import '../controllers/call_controller.dart';
 import '../controllers/call_state.dart';
 import '../models/character.dart';
+import '../models/voice_selection.dart';
 import '../protocol/voice_event.dart';
 import '../websocket/voice_socket.dart';
 import '../widgets/call_avatar.dart';
 import '../widgets/hangup_button.dart';
+import '../widgets/incoming_call_actions.dart';
 
 class CallPage extends StatefulWidget {
   const CallPage({
     required this.character,
     this.controller,
     this.autoConnect = true,
+    this.incomingCall = true,
+    this.voiceSelection = const VoiceSelection(mode: VoiceMode.preset),
     super.key,
   });
 
   final Character character;
   final CallController? controller;
   final bool autoConnect;
+  final bool incomingCall;
+  final VoiceSelection voiceSelection;
 
   @override
   State<CallPage> createState() => _CallPageState();
@@ -37,6 +45,7 @@ class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
   late final AudioCapture _capture;
   late final PcmVad _vad;
   late final PcmAudioPlayer _player;
+  late final RingtonePlayer _ringtone;
   late CallViewState _viewState;
   void Function()? _removeStateListener;
   StreamSubscription<Uint8List>? _captureSubscription;
@@ -45,6 +54,8 @@ class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
   final Uuid _uuid = const Uuid();
   Future<void> _audioWork = Future<void>.value();
   bool _ending = false;
+  bool _resourcesDisposed = false;
+  late bool _accepted;
 
   @override
   void initState() {
@@ -57,6 +68,8 @@ class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
     _capture = AudioCapture();
     _vad = PcmVad();
     _player = PcmAudioPlayer();
+    _ringtone = RingtonePlayer();
+    _accepted = !widget.incomingCall;
     _viewState = _controller.viewState;
     _removeStateListener = _controller.addListener((state) {
       if (mounted) setState(() => _viewState = state);
@@ -66,8 +79,29 @@ class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
     });
     _eventSubscription = _controller.processedEvents.listen(_handleVoiceEvent);
     if (widget.autoConnect) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _connect());
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (widget.incomingCall) {
+          unawaited(_startRinging());
+        } else {
+          unawaited(_connect());
+        }
+      });
     }
+  }
+
+  Future<void> _startRinging() async {
+    try {
+      await _ringtone.start();
+    } on Object {
+      // The incoming call remains answerable if audio output is unavailable.
+    }
+  }
+
+  Future<void> _acceptCall() async {
+    if (_accepted || _ending) return;
+    setState(() => _accepted = true);
+    await _ringtone.dispose();
+    await _connect();
   }
 
   Future<void> _connect() async {
@@ -76,10 +110,13 @@ class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('需要麦克风权限才能打电话')));
-      Navigator.of(context).pop();
+      await _endCall();
       return;
     }
-    await _controller.connect(Uri.parse(defaultVoiceServerUrl));
+    await _controller.connect(
+      Uri.parse(defaultVoiceServerUrl),
+      voiceSelection: widget.voiceSelection,
+    );
   }
 
   void _handleVoiceEvent(VoiceEvent event) {
@@ -149,17 +186,33 @@ class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
   Future<void> _endCall() async {
     if (_ending) return;
     _ending = true;
-    await _stopListening();
-    await _player.stop();
+    await _audioSubscription?.cancel();
+    _audioSubscription = null;
+    await _eventSubscription?.cancel();
+    _eventSubscription = null;
     await _controller.hangUp();
+    await _disposeAudioResources();
     if (mounted) Navigator.of(context).pop();
+  }
+
+  Future<void> _disposeAudioResources() async {
+    if (_resourcesDisposed) return;
+    _resourcesDisposed = true;
+    await _stopListening();
+    try {
+      await _audioWork;
+    } on Object {
+      // A failed playback task must not prevent the next call from cleaning up.
+    }
+    await _ringtone.dispose();
+    await _player.dispose();
+    await _capture.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.detached ||
-        state == AppLifecycleState.inactive) {
+        state == AppLifecycleState.detached) {
       unawaited(_endCall());
     }
   }
@@ -171,70 +224,117 @@ class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
     unawaited(_captureSubscription?.cancel());
     unawaited(_audioSubscription?.cancel());
     unawaited(_eventSubscription?.cancel());
-    unawaited(_capture.dispose());
-    unawaited(_player.dispose());
+    if (!_resourcesDisposed) unawaited(_disposeAudioResources());
     if (_ownsController) _controller.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final color = widget.character.themeColor;
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) unawaited(_endCall());
       },
       child: Scaffold(
-        backgroundColor: color,
-        body: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(24, 22, 24, 34),
-            child: Column(
-              children: [
-                Text(
-                  '${widget.character.name} · AI角色',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  _formatDuration(_viewState.elapsed),
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.82),
-                    fontSize: 17,
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                  ),
-                ),
-                const Spacer(),
-                CallAvatar(
-                  character: widget.character,
-                  phase: _viewState.phase,
-                ),
-                const SizedBox(height: 38),
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 200),
-                  child: Text(
-                    _viewState.statusText(widget.character.name),
-                    key: ValueKey(_viewState.phase),
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 22,
-                      fontWeight: FontWeight.w700,
+        backgroundColor: Colors.black,
+        body: Stack(
+          fit: StackFit.expand,
+          children: [
+            ImageFiltered(
+              imageFilter: ImageFilter.blur(sigmaX: 44, sigmaY: 44),
+              child: Transform.scale(
+                scale: 1.25,
+                child: Image.asset(widget.character.avatar, fit: BoxFit.cover),
+              ),
+            ),
+            ColoredBox(color: Colors.black.withValues(alpha: 0.58)),
+            SafeArea(
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 440),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(28, 28, 28, 34),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        const Spacer(flex: 2),
+                        CallAvatar(
+                          character: widget.character,
+                          phase: _viewState.phase,
+                        ),
+                        const SizedBox(height: 30),
+                        Text(
+                          widget.character.name,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 28,
+                            height: 1.2,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 220),
+                          child: Text(
+                            _accepted
+                                ? _viewState.statusText(widget.character.name)
+                                : 'AI 角色来电',
+                            key: ValueKey((_accepted, _viewState.phase)),
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.88),
+                              fontSize: 20,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        if (_accepted) ...[
+                          Text(
+                            _formatDuration(_viewState.elapsed),
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.72),
+                              fontSize: 16,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures(),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          _MicrophoneStatus(
+                            active: _viewState.microphoneEnabled,
+                          ),
+                        ] else
+                          Text(
+                            '正在呼叫你…',
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.68),
+                              fontSize: 16,
+                            ),
+                          ),
+                        const Spacer(flex: 3),
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 250),
+                          child: _accepted
+                              ? HangupButton(
+                                  key: const ValueKey('active_call_actions'),
+                                  onPressed: () => unawaited(_endCall()),
+                                )
+                              : IncomingCallActions(
+                                  key: const ValueKey('incoming_call_actions'),
+                                  onDecline: () => unawaited(_endCall()),
+                                  onAccept: () => unawaited(_acceptCall()),
+                                ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-                const SizedBox(height: 12),
-                _MicrophoneStatus(active: _viewState.microphoneEnabled),
-                const Spacer(),
-                HangupButton(onPressed: () => unawaited(_endCall())),
-              ],
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );

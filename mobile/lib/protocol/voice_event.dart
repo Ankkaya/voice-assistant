@@ -94,9 +94,13 @@ final class PongEvent extends VoiceEvent {
 }
 
 abstract final class VoiceClientEvent {
-  static Map<String, Object> sessionStart(String characterId) => {
+  static Map<String, Object> sessionStart(
+    String characterId, [
+    Map<String, Object>? voiceConfig,
+  ]) => {
     'type': 'session.start',
     'characterId': characterId,
+    if (voiceConfig != null) 'voiceConfig': voiceConfig,
   };
 
   static Map<String, Object> audioStart(String turnId) => {

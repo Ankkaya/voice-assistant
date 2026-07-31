@@ -40,6 +40,10 @@ class XiaomiTtsProvider:
             if not config.voice_description:
                 raise ProviderConfigError("tts")
             return
+        if config.reference_audio_data:
+            if config.reference_audio_mime not in {"audio/wav", "audio/mpeg"}:
+                raise ProviderConfigError("tts", "UNSUPPORTED_REFERENCE_FORMAT")
+            return
         reference = config.resolved_reference_path(self._reference_base_dir)
         if reference is None or not reference.is_file():
             raise ProviderConfigError("tts", "REFERENCE_AUDIO_NOT_FOUND")
@@ -129,10 +133,19 @@ class XiaomiTtsProvider:
             ]
             audio["optimize_text_preview"] = False
         else:
-            reference = config.resolved_reference_path(self._reference_base_dir)
-            assert reference is not None
-            mime = "audio/wav" if reference.suffix.lower() == ".wav" else "audio/mpeg"
-            encoded = base64.b64encode(reference.read_bytes()).decode("ascii")
+            if config.reference_audio_data:
+                mime = config.reference_audio_mime
+                audio_bytes = config.reference_audio_data
+            else:
+                reference = config.resolved_reference_path(self._reference_base_dir)
+                assert reference is not None
+                mime = (
+                    "audio/wav"
+                    if reference.suffix.lower() == ".wav"
+                    else "audio/mpeg"
+                )
+                audio_bytes = reference.read_bytes()
+            encoded = base64.b64encode(audio_bytes).decode("ascii")
             messages = [
                 {"role": "user", "content": style},
                 {"role": "assistant", "content": text},

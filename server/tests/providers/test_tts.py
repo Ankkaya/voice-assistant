@@ -131,6 +131,18 @@ def test_clone_requires_existing_reference_audio(tmp_path):
         provider.validate(config)
 
 
+def test_clone_accepts_in_memory_uploaded_reference():
+    config = TtsConfig(
+        mode="voice_clone",
+        model="mimo-v2.5-tts-voiceclone",
+        reference_audio_data=b"RIFFauthorized",
+        reference_audio_mime="audio/wav",
+    )
+    provider = XiaomiTtsProvider("test-key", client=httpx.AsyncClient())
+
+    provider.validate(config)
+
+
 @pytest.mark.asyncio
 async def test_tts_rejects_stream_without_audio(httpx_mock):
     httpx_mock.add_response(content=b"data: [DONE]\n\n")

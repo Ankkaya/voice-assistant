@@ -29,6 +29,8 @@ from .protocol import (
 from .providers.asr import AsrProvider
 from .providers.base import ProviderError
 from .providers.tts import TtsProvider
+from .models import TtsConfig, TtsMode
+from .voice_references import VoiceReferenceStore
 
 
 logger = logging.getLogger(__name__)
@@ -64,6 +66,7 @@ class VoiceSession:
         transport: SessionTransport,
         max_duration_seconds: int = 600,
         session_id: str | None = None,
+        reference_store: VoiceReferenceStore | None = None,
     ) -> None:
         self.session_id = session_id or uuid.uuid4().hex
         self.state = SessionState.CONNECTING
@@ -80,6 +83,9 @@ class VoiceSession:
         self._max_duration_seconds = max_duration_seconds
         self._deadline_task: asyncio.Task | None = None
         self._active_task: asyncio.Task | None = None
+        self._reference_store = reference_store
+        self._reference_id: str | None = None
+        self._tts_config: TtsConfig | None = None
 
     @property
     def buffered_audio_bytes(self) -> int:
@@ -133,6 +139,10 @@ class VoiceSession:
         self.history.clear()
         self._turn_id = None
         self._character = None
+        if self._reference_id and self._reference_store:
+            self._reference_store.delete(self._reference_id)
+        self._reference_id = None
+        self._tts_config = None
         logger.info("voice_session_closed session_id=%s reason=%s", self.session_id, reason)
 
     async def _start_session(self, event: SessionStart) -> None:
@@ -143,6 +153,12 @@ class VoiceSession:
             self._character = self._registry.get(event.character_id)
         except KeyError:
             await self._send_error("session", "UNKNOWN_CHARACTER", False)
+            return
+        try:
+            self._tts_config = self._resolve_tts_config(event)
+        except LookupError:
+            await self._send_error("session", "VOICE_REFERENCE_NOT_FOUND", False)
+            await self.close("invalid_voice_reference")
             return
         await self._transport.send_event(SessionReady(sessionId=self.session_id))
         if self._max_duration_seconds > 0:
@@ -215,10 +231,11 @@ class VoiceSession:
 
     async def _speak(self, text: str, turn_id: str) -> None:
         assert self._character is not None
+        assert self._tts_config is not None
         self.state = SessionState.SPEAKING
         await self._transport.send_event(AssistantAudioStart(turnId=turn_id))
         try:
-            async for chunk in self._tts.synthesize(text, self._character.tts):
+            async for chunk in self._tts.synthesize(text, self._tts_config):
                 await self._transport.send_bytes(chunk)
         finally:
             await self._transport.send_event(AssistantAudioEnd(turnId=turn_id))
@@ -260,6 +277,32 @@ class VoiceSession:
         self._audio.clear()
         self._turn_id = None
         self.state = state
+
+    def _resolve_tts_config(self, event: SessionStart) -> TtsConfig:
+        assert self._character is not None
+        voice = event.voice_config
+        if voice is None or voice.mode is TtsMode.PRESET:
+            return self._character.tts.model_copy(deep=True)
+        if voice.mode is TtsMode.VOICE_DESIGN:
+            assert voice.voice_description is not None
+            return TtsConfig(
+                mode=TtsMode.VOICE_DESIGN,
+                model="mimo-v2.5-tts-voicedesign",
+                voiceDescription=voice.voice_description,
+            )
+        assert voice.reference_id is not None
+        if self._reference_store is None:
+            raise LookupError("voice reference store unavailable")
+        reference = self._reference_store.get(voice.reference_id)
+        if reference is None:
+            raise LookupError("voice reference not found")
+        self._reference_id = voice.reference_id
+        return TtsConfig(
+            mode=TtsMode.VOICE_CLONE,
+            model="mimo-v2.5-tts-voiceclone",
+            reference_audio_data=reference.data,
+            reference_audio_mime=reference.mime_type,
+        )
 
     async def _enforce_deadline(self) -> None:
         try:

@@ -11,6 +11,7 @@ class Character {
     required this.name,
     required this.subtitle,
     required this.avatar,
+    required this.defaultVoiceDescription,
     required this.themeColor,
   });
 
@@ -18,6 +19,7 @@ class Character {
   final String name;
   final String subtitle;
   final String avatar;
+  final String defaultVoiceDescription;
   final Color themeColor;
 
   factory Character.fromJson(Map<String, Object?> json) {
@@ -27,6 +29,7 @@ class Character {
       name: json['name']! as String,
       subtitle: json['subtitle']! as String,
       avatar: json['avatar']! as String,
+      defaultVoiceDescription: json['defaultVoiceDescription']! as String,
       themeColor: Color(int.parse('FF$color', radix: 16)),
     );
   }

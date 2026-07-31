@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/character.dart';
+import '../models/voice_selection.dart';
 import '../protocol/voice_event.dart';
 import '../websocket/voice_socket.dart';
 import 'call_state.dart';
@@ -19,12 +20,15 @@ class CallController extends StateNotifier<CallViewState> {
   Timer? _elapsedTimer;
   final _assistantAudio = StreamController<Uint8List>.broadcast();
   final _processedEvents = StreamController<VoiceEvent>.broadcast();
+  bool _shutdownStarted = false;
+  Future<void>? _shutdownFuture;
 
   Stream<Uint8List> get assistantAudio => _assistantAudio.stream;
   Stream<VoiceEvent> get processedEvents => _processedEvents.stream;
   CallViewState get viewState => state;
 
-  Future<void> connect(Uri uri) async {
+  Future<void> connect(Uri uri, {VoiceSelection? voiceSelection}) async {
+    if (_shutdownStarted) return;
     state = state.copyWith(phase: CallPhase.connecting, clearError: true);
     Object? lastError;
     for (var attempt = 0; attempt < 2; attempt++) {
@@ -33,11 +37,16 @@ class CallController extends StateNotifier<CallViewState> {
         lastError = null;
         break;
       } on Object catch (error) {
+        if (_shutdownStarted) return;
         lastError = error;
         if (attempt == 0) {
           await Future<void>.delayed(const Duration(seconds: 1));
         }
       }
+    }
+    if (_shutdownStarted) {
+      await socket.close();
+      return;
     }
     if (lastError != null) {
       state = state.copyWith(
@@ -50,7 +59,12 @@ class CallController extends StateNotifier<CallViewState> {
     _eventSubscription = socket.events.listen(onEvent, onError: onSocketError);
     _audioSubscription = socket.audioChunks.listen(_assistantAudio.add);
     state = state.copyWith(phase: CallPhase.ringing);
-    socket.sendEvent(VoiceClientEvent.sessionStart(character.id));
+    socket.sendEvent(
+      VoiceClientEvent.sessionStart(
+        character.id,
+        voiceSelection?.toProtocolJson(),
+      ),
+    );
   }
 
   void onEvent(VoiceEvent event) {
@@ -119,15 +133,20 @@ class CallController extends StateNotifier<CallViewState> {
   }
 
   Future<void> hangUp() async {
-    if (state.phase != CallPhase.ended) {
+    if (_shutdownStarted) {
+      await _shutdownFuture;
+      return;
+    }
+    _shutdownStarted = true;
+    if (state.phase != CallPhase.connecting && state.phase != CallPhase.ended) {
       try {
         socket.sendEvent(VoiceClientEvent.sessionEnd());
       } on StateError {
         // The socket may already be closed.
       }
     }
-    await _shutdown();
     state = state.copyWith(phase: CallPhase.ended, clearTurnId: true);
+    await _shutdown();
   }
 
   Future<void> onLifecyclePaused() => hangUp();
@@ -152,11 +171,19 @@ class CallController extends StateNotifier<CallViewState> {
   }
 
   Future<void> _shutdown() async {
-    _elapsedTimer?.cancel();
-    _elapsedTimer = null;
-    await _eventSubscription?.cancel();
-    await _audioSubscription?.cancel();
-    await socket.close();
+    final existing = _shutdownFuture;
+    if (existing != null) return existing;
+    final future = () async {
+      _elapsedTimer?.cancel();
+      _elapsedTimer = null;
+      await _eventSubscription?.cancel();
+      _eventSubscription = null;
+      await _audioSubscription?.cancel();
+      _audioSubscription = null;
+      await socket.close();
+    }();
+    _shutdownFuture = future;
+    return future;
   }
 
   @override
@@ -164,7 +191,10 @@ class CallController extends StateNotifier<CallViewState> {
     _elapsedTimer?.cancel();
     unawaited(_eventSubscription?.cancel());
     unawaited(_audioSubscription?.cancel());
-    unawaited(socket.close());
+    if (!_shutdownStarted) {
+      _shutdownStarted = true;
+      unawaited(_shutdown());
+    }
     unawaited(_assistantAudio.close());
     unawaited(_processedEvents.close());
     super.dispose();

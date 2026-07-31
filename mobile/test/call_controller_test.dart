@@ -29,11 +29,25 @@ class FakeVoiceSocket implements VoiceSocketClient {
   Future<void> close() async {}
 }
 
+class DelayedConnectSocket extends FakeVoiceSocket {
+  final connected = Completer<void>();
+  bool closed = false;
+
+  @override
+  Future<void> connect(Uri uri) => connected.future;
+
+  @override
+  Future<void> close() async {
+    closed = true;
+  }
+}
+
 const character = Character(
   id: 'ryder',
   name: '莱德',
   subtitle: '救援队长',
-  avatar: 'assets/characters/ryder.svg',
+  avatar: 'assets/characters/ryder.png',
+  defaultVoiceDescription: '明亮友好的少年声音',
   themeColor: Colors.red,
 );
 
@@ -98,6 +112,21 @@ void main() {
 
     expect(controller.state.phase, CallPhase.processing);
     expect(controller.state.currentTurnId, 'turn_2');
+    controller.dispose();
+  });
+
+  test('hangup while connecting does not start a stale session', () async {
+    final socket = DelayedConnectSocket();
+    final controller = CallController(character: character, socket: socket);
+
+    final connecting = controller.connect(Uri.parse('ws://localhost/voice'));
+    await controller.hangUp();
+    socket.connected.complete();
+    await connecting;
+
+    expect(controller.state.phase, CallPhase.ended);
+    expect(socket.closed, isTrue);
+    expect(socket.sentEvents, isEmpty);
     controller.dispose();
   });
 }

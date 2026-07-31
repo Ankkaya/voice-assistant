@@ -1,15 +1,44 @@
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
+
+from .models import TtsMode
 
 
 class Event(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
 
+class SessionVoiceConfig(Event):
+    mode: TtsMode
+    voice_description: str | None = Field(
+        default=None,
+        alias="voiceDescription",
+        min_length=8,
+        max_length=500,
+    )
+    reference_id: str | None = Field(
+        default=None,
+        alias="referenceId",
+        pattern=r"^[a-f0-9]{32}$",
+    )
+
+    @model_validator(mode="after")
+    def mode_fields_match(self) -> "SessionVoiceConfig":
+        if self.mode is TtsMode.VOICE_DESIGN and not self.voice_description:
+            raise ValueError("voice design requires a description")
+        if self.mode is TtsMode.VOICE_CLONE and not self.reference_id:
+            raise ValueError("voice clone requires a reference")
+        if self.mode is TtsMode.PRESET:
+            self.voice_description = None
+            self.reference_id = None
+        return self
+
+
 class SessionStart(Event):
     type: Literal["session.start"] = "session.start"
     character_id: str = Field(alias="characterId", min_length=1)
+    voice_config: SessionVoiceConfig | None = Field(default=None, alias="voiceConfig")
 
 
 class InputAudioStart(Event):

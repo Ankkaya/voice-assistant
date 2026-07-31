@@ -9,6 +9,7 @@ __pycache__/
 .idea/
 *.iml
 .dart_tool/
+.kotlin/
 build/
 .flutter-plugins
 .flutter-plugins-dependencies

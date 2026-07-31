@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:web_socket_channel/status.dart' as status;
 import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:web_socket_channel/io.dart';
 
 import '../protocol/voice_event.dart';
 
@@ -24,6 +25,8 @@ class VoiceSocket implements VoiceSocketClient {
   StreamSubscription<dynamic>? _subscription;
   Timer? _heartbeat;
   DateTime _lastReceived = DateTime.now();
+  bool _closed = false;
+  bool _intentionalClose = false;
 
   @override
   Stream<VoiceEvent> get events => _events.stream;
@@ -33,21 +36,30 @@ class VoiceSocket implements VoiceSocketClient {
 
   @override
   Future<void> connect(Uri uri) async {
+    if (_closed) throw const VoiceSocketClosed();
     await _closeConnection();
-    final channel = WebSocketChannel.connect(uri);
+    _intentionalClose = false;
+    final channel = IOWebSocketChannel.connect(
+      uri,
+      connectTimeout: const Duration(seconds: 8),
+    );
     _channel = channel;
     try {
-      await channel.ready.timeout(const Duration(seconds: 8));
+      await channel.ready;
     } on Object {
       await _closeConnection();
       rethrow;
+    }
+    if (_closed || !identical(_channel, channel)) {
+      await channel.sink.close(status.goingAway);
+      throw const VoiceSocketClosed();
     }
     _lastReceived = DateTime.now();
     _subscription = channel.stream.listen(
       _onMessage,
       onError: _events.addError,
       onDone: () {
-        if (!_events.isClosed) {
+        if (!_intentionalClose && !_events.isClosed) {
           _events.addError(const VoiceSocketClosed());
         }
       },
@@ -104,19 +116,31 @@ class VoiceSocket implements VoiceSocketClient {
 
   @override
   Future<void> close() async {
+    if (_closed) return;
+    _closed = true;
+    _intentionalClose = true;
     await _closeConnection();
-    await _events.close();
-    await _audio.close();
+    if (!_events.isClosed) await _events.close();
+    if (!_audio.isClosed) await _audio.close();
   }
 
   Future<void> _closeConnection() async {
+    _intentionalClose = true;
     _heartbeat?.cancel();
     _heartbeat = null;
-    await _subscription?.cancel();
-    _subscription = null;
     final channel = _channel;
     _channel = null;
-    await channel?.sink.close(status.goingAway);
+    if (channel != null) {
+      try {
+        await channel.sink
+            .close(status.goingAway)
+            .timeout(const Duration(seconds: 2));
+      } on Object {
+        // Closing is best-effort, especially while a handshake is in flight.
+      }
+    }
+    await _subscription?.cancel();
+    _subscription = null;
   }
 }
 

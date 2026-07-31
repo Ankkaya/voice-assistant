@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 
 import '../controllers/call_state.dart';
 import '../models/character.dart';
@@ -79,7 +78,9 @@ class _CallAvatarState extends State<CallAvatar>
             ),
           ],
         ),
-        child: SvgPicture.asset(widget.character.avatar),
+        child: ClipOval(
+          child: Image.asset(widget.character.avatar, fit: BoxFit.cover),
+        ),
       ),
     );
   }

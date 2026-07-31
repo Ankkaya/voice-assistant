@@ -4,7 +4,9 @@ import pytest
 
 from app.protocol import serialize_server_event
 from app.providers.base import ProviderError
+from app.models import TtsMode
 from app.session import SessionState, VoiceSession
+from app.voice_references import VoiceReferenceStore
 
 
 class FakeTransport:
@@ -49,7 +51,7 @@ class FakeTts:
         self.calls = []
 
     async def synthesize(self, text, config):
-        self.calls.append((text, config.mode))
+        self.calls.append((text, config))
         if isinstance(self.chunks, Exception):
             raise self.chunks
         for chunk in self.chunks:
@@ -76,7 +78,7 @@ def audio_commit(turn="turn_1"):
 def make_session(registry):
     sessions = []
 
-    def factory(asr=None, agent=None, tts=None, transport=None):
+    def factory(asr=None, agent=None, tts=None, transport=None, reference_store=None):
         session = VoiceSession(
             registry=registry,
             asr=asr or FakeAsr(),
@@ -84,6 +86,7 @@ def make_session(registry):
             tts=tts or FakeTts(),
             transport=transport or FakeTransport(),
             max_duration_seconds=0,
+            reference_store=reference_store,
         )
         sessions.append(session)
         return session
@@ -174,3 +177,52 @@ async def test_close_clears_audio_and_history(make_session):
     assert session.state is SessionState.ENDED
     assert session.history == []
     assert session.buffered_audio_bytes == 0
+
+
+@pytest.mark.asyncio
+async def test_voice_design_is_applied_to_greeting(make_session):
+    tts = FakeTts()
+    session = make_session(tts=tts)
+    await session.handle_text(
+        json.dumps(
+            {
+                "type": "session.start",
+                "characterId": "ryder",
+                "voiceConfig": {
+                    "mode": "voice_design",
+                    "voiceDescription": "明亮自信、温暖友好的少年队长声音",
+                },
+            }
+        )
+    )
+
+    config = tts.calls[0][1]
+    assert config.mode is TtsMode.VOICE_DESIGN
+    assert config.model == "mimo-v2.5-tts-voicedesign"
+    assert "少年队长" in config.voice_description
+
+
+@pytest.mark.asyncio
+async def test_voice_clone_uses_and_releases_uploaded_reference(make_session):
+    store = VoiceReferenceStore()
+    reference_id = store.put(b"RIFFauthorized", "audio/wav")
+    tts = FakeTts()
+    session = make_session(tts=tts, reference_store=store)
+    await session.handle_text(
+        json.dumps(
+            {
+                "type": "session.start",
+                "characterId": "ryder",
+                "voiceConfig": {
+                    "mode": "voice_clone",
+                    "referenceId": reference_id,
+                },
+            }
+        )
+    )
+
+    config = tts.calls[0][1]
+    assert config.mode is TtsMode.VOICE_CLONE
+    assert config.reference_audio_data == b"RIFFauthorized"
+    await session.close("test")
+    assert store.get(reference_id) is None

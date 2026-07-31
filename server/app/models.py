@@ -16,6 +16,8 @@ class TtsConfig(BaseModel):
     voice: str | None = None
     voice_description: str | None = Field(default=None, alias="voiceDescription")
     reference_audio_path: str | None = Field(default=None, alias="referenceAudioPath")
+    reference_audio_data: bytes | None = Field(default=None, exclude=True)
+    reference_audio_mime: str | None = Field(default=None, exclude=True)
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -25,8 +27,12 @@ class TtsConfig(BaseModel):
             raise ValueError("preset TTS requires voice")
         if self.mode is TtsMode.VOICE_DESIGN and not self.voice_description:
             raise ValueError("voice_design TTS requires voiceDescription")
-        if self.mode is TtsMode.VOICE_CLONE and not self.reference_audio_path:
-            raise ValueError("voice_clone TTS requires referenceAudioPath")
+        if (
+            self.mode is TtsMode.VOICE_CLONE
+            and not self.reference_audio_path
+            and not self.reference_audio_data
+        ):
+            raise ValueError("voice_clone TTS requires reference audio")
         return self
 
     def resolved_reference_path(self, base_dir: Path) -> Path | None:

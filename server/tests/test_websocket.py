@@ -62,3 +62,43 @@ def test_websocket_streams_greeting_after_session_start():
             assert ws.receive_json()["type"] == "assistant.audio.start"
             assert ws.receive_bytes() == b"\x01\x02"
             assert ws.receive_json()["type"] == "assistant.audio.end"
+
+
+def test_voice_reference_upload_accepts_wav():
+    with TestClient(make_test_app()) as client:
+        response = client.post(
+            "/api/voice-references",
+            files={
+                "file": (
+                    "authorized.wav",
+                    b"RIFF\x04\x00\x00\x00WAVEauthorized",
+                    "audio/wav",
+                )
+            },
+        )
+
+    assert response.status_code == 201
+    assert len(response.json()["referenceId"]) == 32
+    assert response.json()["sizeBytes"] == len(
+        b"RIFF\x04\x00\x00\x00WAVEauthorized"
+    )
+
+
+def test_voice_reference_upload_rejects_unsupported_file():
+    with TestClient(make_test_app()) as client:
+        response = client.post(
+            "/api/voice-references",
+            files={"file": ("voice.txt", b"not audio", "text/plain")},
+        )
+
+    assert response.status_code == 400
+
+
+def test_voice_reference_upload_rejects_fake_wav():
+    with TestClient(make_test_app()) as client:
+        response = client.post(
+            "/api/voice-references",
+            files={"file": ("voice.wav", b"not really wav", "audio/wav")},
+        )
+
+    assert response.status_code == 400
