@@ -36,6 +36,17 @@ def test_direct_key_takes_precedence_over_secret_file(tmp_path):
     assert settings.mimo_api_key.get_secret_value() == "direct-key"
 
 
+def test_settings_load_secret_file_path_from_environment(tmp_path, monkeypatch):
+    secret = tmp_path / "mimo"
+    secret.write_text("environment-file-key\n", encoding="utf-8")
+    monkeypatch.setenv("MIMO_API_KEY_FILE", str(secret))
+
+    settings = Settings(_env_file=None)
+
+    assert settings.mimo_api_key is not None
+    assert settings.mimo_api_key.get_secret_value() == "environment-file-key"
+
+
 def test_missing_secret_file_is_rejected_without_content(tmp_path):
     missing = tmp_path / "missing"
 

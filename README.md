@@ -42,7 +42,7 @@ LLM_API_KEY=
 
 同一个 MiMo Token 可以同时填写到 `MIMO_API_KEY` 和 `LLM_API_KEY`。当前实现使用 OpenAI 兼容协议，不需要 `https://token-plan-cn.xiaomimimo.com/anthropic`。
 
-密钥只允许放在 `.env`，不要写入 Flutter、角色 JSON 或提交到 Git。
+密钥只允许放在本机 `.env` 或部署平台的 Secret 存储中，不要写入 Flutter、角色 JSON 或提交到 Git。Flutter 的 `--dart-define` 只配置 `VOICE_SERVER_URL`，不传递任何供应商密钥。
 
 ## 启动后端
 
@@ -51,6 +51,15 @@ LLM_API_KEY=
 ```bash
 docker compose up --build
 ```
+
+Compose 使用宿主机 `.env` 中的 `MIMO_API_KEY` 和 `LLM_API_KEY` 创建 Docker Secrets，并分别挂载为：
+
+```text
+/run/secrets/mimo_api_key
+/run/secrets/llm_api_key
+```
+
+容器环境只有 `MIMO_API_KEY_FILE` 和 `LLM_API_KEY_FILE` 两个文件路径，不包含密钥值；`.env` 不会作为 `env_file` 注入容器，也不会复制进镜像。其余模型、接口和日志配置以普通环境变量传入。
 
 ### 本机 Python
 
@@ -61,6 +70,8 @@ pip install -r server/requirements.txt
 cd server
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
+
+本机 Python 不经过 Docker，Pydantic Settings 直接读取项目根目录的 `.env`。服务端同时支持 `MIMO_API_KEY_FILE` 和 `LLM_API_KEY_FILE`；直接密钥存在时优先使用直接值，否则读取对应文件。
 
 检查服务：
 

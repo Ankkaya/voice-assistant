@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Runtime configuration loaded exclusively from environment variables."""
+    """Runtime configuration loaded from environment variables or secret files."""
 
     mimo_api_key: SecretStr | None = None
     mimo_api_key_file: Path | None = None

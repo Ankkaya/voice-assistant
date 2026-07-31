@@ -2,8 +2,25 @@ services:
   voice-server:
     build:
       context: ./server
-    env_file:
-      - .env
+    environment:
+      MIMO_API_KEY_FILE: /run/secrets/mimo_api_key
+      LLM_API_KEY_FILE: /run/secrets/llm_api_key
+      MIMO_BASE_URL: "${MIMO_BASE_URL:-https://token-plan-cn.xiaomimimo.com/v1}"
+      LLM_PROVIDER: "${LLM_PROVIDER:-openai_compatible}"
+      LLM_MODEL: "${LLM_MODEL:-mimo-v2.5}"
+      LLM_BASE_URL: "${LLM_BASE_URL:-https://token-plan-cn.xiaomimimo.com/v1}"
+      VOICE_HOST: "${VOICE_HOST:-0.0.0.0}"
+      VOICE_PORT: "${VOICE_PORT:-8000}"
+      LOG_LEVEL: "${LOG_LEVEL:-INFO}"
+    secrets:
+      - mimo_api_key
+      - llm_api_key
     ports:
       - "8000:8000"
     restart: unless-stopped
+
+secrets:
+  mimo_api_key:
+    environment: MIMO_API_KEY
+  llm_api_key:
+    environment: LLM_API_KEY
