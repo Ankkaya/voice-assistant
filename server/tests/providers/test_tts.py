@@ -39,6 +39,50 @@ async def test_preset_stream_decodes_pcm_chunks(httpx_mock):
 
 
 @pytest.mark.asyncio
+async def test_stream_skips_status_events_without_audio_data(httpx_mock):
+    audio_data = base64.b64encode(b"\x01\x02").decode("ascii")
+    events = [
+        {"choices": [{"delta": {"audio": None}, "finish_reason": None}]},
+        {"choices": [{"delta": {"audio": {"data": audio_data}}}]},
+        {"choices": [{"delta": {"audio": None}, "finish_reason": "stop"}]},
+        {"choices": [], "usage": {"total_tokens": 1}},
+    ]
+    content = "".join(f"data: {json.dumps(event)}\n\n" for event in events)
+    content += "data: [DONE]\n\n"
+    httpx_mock.add_response(content=content.encode())
+    config = TtsConfig(
+        mode=TtsMode.PRESET,
+        model="mimo-v2.5-tts",
+        voice="白桦",
+    )
+
+    async with httpx.AsyncClient() as client:
+        provider = XiaomiTtsProvider("test-key", client=client)
+        chunks = [chunk async for chunk in provider.synthesize("你好", config)]
+
+    assert chunks == [b"\x01\x02"]
+
+
+@pytest.mark.asyncio
+async def test_stream_rejects_malformed_audio_event(httpx_mock):
+    event = {"choices": [{"delta": {"audio": {"id": "audio-id"}}}]}
+    content = f"data: {json.dumps(event)}\n\ndata: [DONE]\n\n"
+    httpx_mock.add_response(content=content.encode())
+    config = TtsConfig(
+        mode=TtsMode.PRESET,
+        model="mimo-v2.5-tts",
+        voice="白桦",
+    )
+
+    async with httpx.AsyncClient() as client:
+        provider = XiaomiTtsProvider("test-key", client=client)
+        with pytest.raises(ProviderError) as error:
+            _ = [chunk async for chunk in provider.synthesize("你好", config)]
+
+    assert error.value.code == "INVALID_RESPONSE"
+
+
+@pytest.mark.asyncio
 async def test_voice_design_uses_description(httpx_mock):
     httpx_mock.add_response(content=sse_audio(b"\x01\x02"))
     config = TtsConfig(

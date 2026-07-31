@@ -16,7 +16,7 @@ class XiaomiAsrProvider:
         api_key: str,
         *,
         client: httpx.AsyncClient,
-        base_url: str = "https://api.xiaomimimo.com/v1",
+        base_url: str = "https://token-plan-cn.xiaomimimo.com/v1",
     ) -> None:
         if not api_key:
             raise ValueError("MiMo API key is required")

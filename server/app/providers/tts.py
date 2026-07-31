@@ -21,7 +21,7 @@ class XiaomiTtsProvider:
         api_key: str,
         *,
         client: httpx.AsyncClient,
-        base_url: str = "https://api.xiaomimimo.com/v1",
+        base_url: str = "https://token-plan-cn.xiaomimimo.com/v1",
         reference_base_dir: Path | None = None,
     ) -> None:
         if not api_key:
@@ -82,9 +82,23 @@ class XiaomiTtsProvider:
                         continue
                     try:
                         body_chunk = json.loads(payload)
-                        encoded = body_chunk["choices"][0]["delta"]["audio"]["data"]
+                        choices = body_chunk["choices"]
+                        if not choices and "usage" in body_chunk:
+                            continue
+                        delta = choices[0]["delta"]
+                        audio = delta.get("audio")
+                        if audio is None:
+                            continue
+                        encoded = audio["data"]
                         chunk = base64.b64decode(encoded, validate=True)
-                    except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as exc:
+                    except (
+                        AttributeError,
+                        KeyError,
+                        IndexError,
+                        TypeError,
+                        ValueError,
+                        json.JSONDecodeError,
+                    ) as exc:
                         raise ProviderError("tts", "INVALID_RESPONSE") from exc
                     if chunk:
                         yielded_audio = True

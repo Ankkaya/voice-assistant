@@ -31,14 +31,16 @@ cp .env.example .env
 ```env
 # 在等号后填入 MiMo Key
 MIMO_API_KEY=
-MIMO_BASE_URL=https://api.xiaomimimo.com/v1
+MIMO_BASE_URL=https://token-plan-cn.xiaomimimo.com/v1
 
 LLM_PROVIDER=openai_compatible
-# 在下面三项的等号后分别填入模型名、接口地址和 Key
-LLM_MODEL=
-LLM_BASE_URL=
+# 当前 MVP 的 LangChain Agent 也使用 MiMo OpenAI 兼容接口
+LLM_MODEL=mimo-v2.5
+LLM_BASE_URL=https://token-plan-cn.xiaomimimo.com/v1
 LLM_API_KEY=
 ```
+
+同一个 MiMo Token 可以同时填写到 `MIMO_API_KEY` 和 `LLM_API_KEY`。当前实现使用 OpenAI 兼容协议，不需要 `https://token-plan-cn.xiaomimimo.com/anthropic`。
 
 密钥只允许放在 `.env`，不要写入 Flutter、角色 JSON 或提交到 Git。
 

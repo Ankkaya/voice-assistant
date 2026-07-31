@@ -11,7 +11,7 @@ from app.providers.base import ProviderError
 @pytest.mark.asyncio
 async def test_mimo_asr_sends_wav_data_url(httpx_mock):
     httpx_mock.add_response(
-        url="https://api.xiaomimimo.com/v1/chat/completions",
+        url="https://token-plan-cn.xiaomimimo.com/v1/chat/completions",
         json={"choices": [{"message": {"content": "你好"}}]},
     )
     async with httpx.AsyncClient() as client:

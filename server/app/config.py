@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     """Runtime configuration loaded exclusively from environment variables."""
 
     mimo_api_key: SecretStr | None = None
-    mimo_base_url: str = "https://api.xiaomimimo.com/v1"
+    mimo_base_url: str = "https://token-plan-cn.xiaomimimo.com/v1"
 
     llm_provider: str = "openai_compatible"
     llm_model: str = ""

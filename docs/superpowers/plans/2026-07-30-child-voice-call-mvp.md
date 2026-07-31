@@ -195,7 +195,7 @@ Expected: import fails because `XiaomiAsrProvider` is absent.
 
 - [ ] **Step 3: Implement the OpenAI-compatible MiMo request**
 
-POST to `https://api.xiaomimimo.com/v1/chat/completions` with Bearer authentication, `stream: false`, language `zh`, one `input_audio` content item, and a 20-second timeout. Convert malformed, empty, 401, 429, 5xx, and timeout responses into stable `ProviderError` codes without including response bodies in logs.
+POST to `https://token-plan-cn.xiaomimimo.com/v1/chat/completions` with Bearer authentication, `stream: false`, language `zh`, one `input_audio` content item, and a 20-second timeout. Convert malformed, empty, 401, 429, 5xx, and timeout responses into stable `ProviderError` codes without including response bodies in logs.
 
 - [ ] **Step 4: Run tests**
 
