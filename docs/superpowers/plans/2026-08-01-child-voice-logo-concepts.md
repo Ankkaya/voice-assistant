@@ -15,7 +15,7 @@
 - The tone is warm and playful without appearing infantile.
 - Use brand blue `#4E72E6` and warm yellow `#F5B83C`; use warm white only as a neutral background or minimal supporting color.
 - Use a flat, geometric, modern, vector-friendly visual language with a clear outer silhouette.
-- Use a centered composition on a `1024x1024` square canvas with generous, consistent safety padding.
+- Request a centered `1024x1024` square canvas with generous, consistent safety padding; accept a larger square response from the configured endpoint when both edges are at least `1024px`.
 - Do not include telephones, receivers, microphones, headphones, call buttons, robots, mechanical parts, circuit textures, generic chatbot symbols, complex gradients, realistic 3D, glass, metal, heavy shadows, watermarks, or imitations of existing brands and characters.
 - Use `gpt-image-2` with `quality=high`; do not set `input_fidelity` or request transparent output.
 - Treat generated PNGs as concept candidates, not final release-ready vector artwork.
@@ -97,10 +97,10 @@ Expected: exit code `0`; the output directory contains six non-empty PNG candida
 Run:
 
 ```bash
-PYTHONPATH=.python-deps python3 -c 'from pathlib import Path; import struct; root=Path("output/imagegen/child-voice-logo-concepts"); files=sorted(root.glob("[0-9][0-9]-*.png")); assert len(files)==6, files; dims=[]; [(lambda data,p: dims.append((p.name, *struct.unpack(">II", data[16:24]))))(p.read_bytes()[:24],p) for p in files]; assert all(w==1024 and h==1024 for _,w,h in dims), dims; print(dims)'
+PYTHONPATH=.python-deps python3 -c 'from pathlib import Path; import struct; root=Path("output/imagegen/child-voice-logo-concepts"); files=sorted(root.glob("[0-9][0-9]-*.png")); assert len(files)==6, files; dims=[]; [(lambda data,p: dims.append((p.name, *struct.unpack(">II", data[16:24]))))(p.read_bytes()[:24],p) for p in files]; assert all(w==h and w>=1024 for _,w,h in dims), dims; print(dims)'
 ```
 
-Expected: six entries, each reporting `1024, 1024`.
+Expected: six square entries with both edges at least `1024px`; the current configured endpoint reports `1254, 1254` for each generated candidate.
 
 - [ ] **Step 6: Commit the reproducible prompt set and raw candidates**
 
