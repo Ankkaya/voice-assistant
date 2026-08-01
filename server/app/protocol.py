@@ -1,6 +1,14 @@
+import re
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    TypeAdapter,
+    field_validator,
+    model_validator,
+)
 
 from .models import TtsMode
 
@@ -9,8 +17,33 @@ class Event(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
 
+class CustomCharacterSpec(Event):
+    display_name: str = Field(alias="displayName", min_length=1, max_length=20)
+    greeting: str = Field(min_length=1, max_length=120)
+    identity_id: str = Field(
+        alias="identityId", pattern=r"^[a-z][a-z0-9_]*$"
+    )
+    trait_ids: list[str] = Field(alias="traitIds", min_length=1, max_length=3)
+    interest_ids: list[str] = Field(alias="interestIds", max_length=3)
+    description: str = Field(default="", max_length=200)
+
+    @field_validator("display_name", "greeting", "description", mode="before")
+    @classmethod
+    def trim_free_text(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
+
+    @model_validator(mode="after")
+    def options_must_be_unique(self) -> "CustomCharacterSpec":
+        if len(set(self.trait_ids)) != len(self.trait_ids):
+            raise ValueError("trait IDs must be unique")
+        if len(set(self.interest_ids)) != len(self.interest_ids):
+            raise ValueError("interest IDs must be unique")
+        return self
+
+
 class SessionVoiceConfig(Event):
     mode: TtsMode
+    voice: str | None = Field(default=None, min_length=1, max_length=40)
     voice_description: str | None = Field(
         default=None,
         alias="voiceDescription",
@@ -23,22 +56,54 @@ class SessionVoiceConfig(Event):
         pattern=r"^[a-f0-9]{32}$",
     )
 
+    @field_validator("voice", "voice_description", mode="before")
+    @classmethod
+    def trim_voice_text(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
+
     @model_validator(mode="after")
     def mode_fields_match(self) -> "SessionVoiceConfig":
-        if self.mode is TtsMode.VOICE_DESIGN and not self.voice_description:
-            raise ValueError("voice design requires a description")
-        if self.mode is TtsMode.VOICE_CLONE and not self.reference_id:
-            raise ValueError("voice clone requires a reference")
         if self.mode is TtsMode.PRESET:
             self.voice_description = None
             self.reference_id = None
+            return self
+        if self.voice is not None:
+            raise ValueError("only preset mode accepts voice")
+        if self.mode is TtsMode.VOICE_DESIGN:
+            if not self.voice_description:
+                raise ValueError("voice design requires a description")
+            self.reference_id = None
+            return self
+        if not self.reference_id:
+            raise ValueError("voice clone requires a reference")
+        self.voice_description = None
         return self
 
 
 class SessionStart(Event):
     type: Literal["session.start"] = "session.start"
     character_id: str = Field(alias="characterId", min_length=1)
+    custom_character: CustomCharacterSpec | None = Field(
+        default=None, alias="customCharacter"
+    )
     voice_config: SessionVoiceConfig | None = Field(default=None, alias="voiceConfig")
+
+    @model_validator(mode="after")
+    def custom_fields_match_id(self) -> "SessionStart":
+        is_custom = self.character_id.startswith("custom_")
+        if is_custom:
+            if re.fullmatch(r"custom_[a-f0-9]{32}", self.character_id) is None:
+                raise ValueError("invalid custom character ID")
+            if self.custom_character is None or self.voice_config is None:
+                raise ValueError("custom characters require snapshot and voice")
+            if (
+                self.voice_config.mode is TtsMode.PRESET
+                and not self.voice_config.voice
+            ):
+                raise ValueError("custom preset voice is required")
+        elif self.custom_character is not None:
+            raise ValueError("bundled characters cannot include custom snapshot")
+        return self
 
 
 class InputAudioStart(Event):
