@@ -17,6 +17,7 @@ from .providers.asr import XiaomiAsrProvider
 from .providers.tts import XiaomiTtsProvider
 from .safety import SafetyGuard
 from .session import VoiceSession
+from .custom_characters import SessionCharacterResolver
 from .voice_references import MAX_REFERENCE_BYTES, VoiceReferenceStore
 
 
@@ -165,7 +166,12 @@ def create_app(injected: AppDependencies | None = None) -> FastAPI:
             return
 
         session = VoiceSession(
-            registry=dependencies.registry,
+            character_resolver=SessionCharacterResolver(
+                registry=dependencies.registry,
+                options=dependencies.options,
+                safety=SafetyGuard(),
+                reference_store=dependencies.reference_store,
+            ),
             asr=dependencies.asr,
             agent=dependencies.agent,
             tts=dependencies.tts,

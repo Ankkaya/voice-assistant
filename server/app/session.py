@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import uuid
 from collections.abc import Sequence
@@ -9,7 +10,7 @@ from pydantic import ValidationError
 
 from .agent import ConversationTurn, LangChainAgent
 from .audio import pcm16le_duration_seconds, pcm16le_to_wav
-from .characters import CharacterRegistry
+from .custom_characters import CharacterResolutionError, SessionCharacterResolver
 from .protocol import (
     AssistantAudioEnd,
     AssistantAudioStart,
@@ -29,7 +30,7 @@ from .protocol import (
 from .providers.asr import AsrProvider
 from .providers.base import ProviderError
 from .providers.tts import TtsProvider
-from .models import TtsConfig, TtsMode
+from .models import TtsConfig
 from .voice_references import VoiceReferenceStore
 
 
@@ -59,7 +60,7 @@ class VoiceSession:
     def __init__(
         self,
         *,
-        registry: CharacterRegistry,
+        character_resolver: SessionCharacterResolver,
         asr: AsrProvider,
         agent: LangChainAgent,
         tts: TtsProvider,
@@ -71,7 +72,7 @@ class VoiceSession:
         self.session_id = session_id or uuid.uuid4().hex
         self.state = SessionState.CONNECTING
         self.history: list[ConversationTurn] = []
-        self._registry = registry
+        self._character_resolver = character_resolver
         self._asr = asr
         self._agent = agent
         self._tts = tts
@@ -100,7 +101,13 @@ class VoiceSession:
         try:
             event = parse_client_event(raw)
         except (ValidationError, ValueError):
-            await self._send_error("protocol", "INVALID_EVENT", False)
+            if self._is_custom_session_start(raw):
+                await self._send_error(
+                    "session", "INVALID_CHARACTER_CONFIG", False
+                )
+                await self.close("invalid_character_config")
+            else:
+                await self._send_error("protocol", "INVALID_EVENT", False)
             return
 
         if isinstance(event, SessionStart):
@@ -150,16 +157,17 @@ class VoiceSession:
             await self._send_error("protocol", "INVALID_STATE", False)
             return
         try:
-            self._character = self._registry.get(event.character_id)
+            resolved = self._character_resolver.resolve(event)
         except KeyError:
             await self._send_error("session", "UNKNOWN_CHARACTER", False)
             return
-        try:
-            self._tts_config = self._resolve_tts_config(event)
-        except LookupError:
-            await self._send_error("session", "VOICE_REFERENCE_NOT_FOUND", False)
-            await self.close("invalid_voice_reference")
+        except CharacterResolutionError as error:
+            await self._send_error("session", error.code, False)
+            await self.close("invalid_character_config")
             return
+        self._character = resolved.character
+        self._tts_config = resolved.tts
+        self._reference_id = resolved.reference_id
         await self._transport.send_event(SessionReady(sessionId=self.session_id))
         if self._max_duration_seconds > 0:
             self._deadline_task = asyncio.create_task(self._enforce_deadline())
@@ -261,6 +269,15 @@ class VoiceSession:
         )
 
     def _error_message(self, stage: str, code: str) -> str:
+        if stage == "session" and code in {
+            "INVALID_CHARACTER_CONFIG",
+            "UNSUPPORTED_CHARACTER_OPTION",
+            "UNSAFE_CHARACTER_CONFIG",
+            "UNSUPPORTED_PRESET_VOICE",
+        }:
+            return "角色设定需要修改后才能通话。"
+        if stage == "session" and code == "VOICE_REFERENCE_NOT_FOUND":
+            return "参考音频已失效，请重新选择后再试。"
         if stage == "asr" and code in {"EMPTY_RESULT", "INVALID_RESPONSE"}:
             if self._empty_asr_count >= 3:
                 return "周围有点吵，可以换个安静的地方再说一次吗？"
@@ -278,31 +295,18 @@ class VoiceSession:
         self._turn_id = None
         self.state = state
 
-    def _resolve_tts_config(self, event: SessionStart) -> TtsConfig:
-        assert self._character is not None
-        voice = event.voice_config
-        if voice is None or voice.mode is TtsMode.PRESET:
-            return self._character.tts.model_copy(deep=True)
-        if voice.mode is TtsMode.VOICE_DESIGN:
-            assert voice.voice_description is not None
-            return TtsConfig(
-                mode=TtsMode.VOICE_DESIGN,
-                model="mimo-v2.5-tts-voicedesign",
-                voiceDescription=voice.voice_description,
-            )
-        assert voice.reference_id is not None
-        if self._reference_store is None:
-            raise LookupError("voice reference store unavailable")
-        reference = self._reference_store.get(voice.reference_id)
-        if reference is None:
-            raise LookupError("voice reference not found")
-        self._reference_id = voice.reference_id
-        return TtsConfig(
-            mode=TtsMode.VOICE_CLONE,
-            model="mimo-v2.5-tts-voiceclone",
-            reference_audio_data=reference.data,
-            reference_audio_mime=reference.mime_type,
-        )
+    @staticmethod
+    def _is_custom_session_start(raw: str) -> bool:
+        try:
+            body = json.loads(raw)
+        except (TypeError, ValueError):
+            return False
+        if not isinstance(body, dict) or body.get("type") != "session.start":
+            return False
+        character_id = body.get("characterId")
+        return (
+            isinstance(character_id, str) and character_id.startswith("custom_")
+        ) or "customCharacter" in body
 
     async def _enforce_deadline(self) -> None:
         try:

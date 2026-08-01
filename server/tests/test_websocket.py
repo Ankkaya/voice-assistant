@@ -76,6 +76,30 @@ def test_websocket_streams_greeting_after_session_start():
             assert ws.receive_json()["type"] == "assistant.audio.end"
 
 
+def test_websocket_supports_custom_character():
+    with TestClient(make_test_app()) as client:
+        with client.websocket_connect("/ws/voice") as ws:
+            ws.send_json(
+                {
+                    "type": "session.start",
+                    "characterId": "custom_20a8d1b51412447a99abc336e306f25f",
+                    "customCharacter": {
+                        "displayName": "星星船长",
+                        "greeting": "你好呀，我是星星船长！",
+                        "identityId": "adventure_companion",
+                        "traitIds": ["brave", "patient"],
+                        "interestIds": ["space", "science"],
+                        "description": "喜欢用有趣的小实验解释问题",
+                    },
+                    "voiceConfig": {"mode": "preset", "voice": "白桦"},
+                }
+            )
+            assert ws.receive_json()["type"] == "session.ready"
+            assert ws.receive_json()["type"] == "assistant.audio.start"
+            assert ws.receive_bytes() == b"\x01\x02"
+            assert ws.receive_json()["type"] == "assistant.audio.end"
+
+
 def test_voice_reference_upload_accepts_wav():
     with TestClient(make_test_app()) as client:
         response = client.post(
