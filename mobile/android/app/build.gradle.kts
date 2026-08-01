@@ -24,6 +24,11 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        if (providers.gradleProperty("arm64Only").orNull == "true") {
+            ndk {
+                abiFilters += "arm64-v8a"
+            }
+        }
     }
 
     buildTypes {
