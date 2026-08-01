@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/character.dart';
 import '../models/voice_selection.dart';
+import '../repositories/bundled_character_repository.dart';
 import '../services/voice_reference_uploader.dart';
 import '../widgets/character_card.dart';
 import 'call_page.dart';

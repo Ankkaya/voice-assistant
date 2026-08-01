@@ -1,9 +1,6 @@
-import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'custom_character.dart';
 import 'voice_selection.dart';
@@ -215,20 +212,3 @@ class Character {
   static String _colorHex(Color color) =>
       '#${color.toARGB32().toRadixString(16).substring(2).toUpperCase()}';
 }
-
-class CharacterRepository {
-  const CharacterRepository();
-
-  Future<List<Character>> load() async {
-    final source = await rootBundle.loadString('assets/characters.json');
-    final records = jsonDecode(source) as List<dynamic>;
-    return records
-        .cast<Map<String, dynamic>>()
-        .map(Character.fromBundledJson)
-        .toList(growable: false);
-  }
-}
-
-final charactersProvider = FutureProvider<List<Character>>((ref) {
-  return const CharacterRepository().load();
-});
