@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../models/character.dart';
 import '../models/voice_selection.dart';
+import 'character_avatar_image.dart';
 
 class CharacterCard extends StatefulWidget {
   const CharacterCard({
@@ -124,8 +125,9 @@ class _CharacterCardState extends State<CharacterCard> {
                     shape: BoxShape.circle,
                   ),
                   child: ClipOval(
-                    child: Image.asset(
-                      character.avatar.value,
+                    child: CharacterAvatarImage(
+                      avatar: character.avatar,
+                      fallbackColor: character.themeColor,
                       fit: BoxFit.cover,
                     ),
                   ),

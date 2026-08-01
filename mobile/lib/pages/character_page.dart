@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../controllers/character_catalog_controller.dart';
 import '../models/character.dart';
 import '../models/voice_selection.dart';
-import '../repositories/bundled_character_repository.dart';
 import '../services/voice_reference_uploader.dart';
 import '../widgets/character_card.dart';
 import 'call_page.dart';
@@ -85,11 +85,11 @@ class _CharacterPageState extends ConsumerState<CharacterPage> {
               const SizedBox(height: 24),
               Expanded(
                 child: characters.when(
-                  data: (items) => ListView.separated(
-                    itemCount: items.length,
+                  data: (catalog) => ListView.separated(
+                    itemCount: catalog.characters.length,
                     separatorBuilder: (_, __) => const SizedBox(height: 16),
                     itemBuilder: (context, index) {
-                      final character = items[index];
+                      final character = catalog.characters[index];
                       return CharacterCard(
                         character: character,
                         onCall: (selection) => _startCall(character, selection),

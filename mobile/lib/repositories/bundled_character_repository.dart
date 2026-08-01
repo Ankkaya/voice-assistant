@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:flutter/services.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/character.dart';
 
@@ -27,7 +26,3 @@ class BundledCharacterRepository {
         .toList(growable: false);
   }
 }
-
-final charactersProvider = FutureProvider<List<Character>>((ref) {
-  return BundledCharacterRepository().load();
-});

@@ -16,6 +16,7 @@ import '../models/voice_selection.dart';
 import '../protocol/voice_event.dart';
 import '../websocket/voice_socket.dart';
 import '../widgets/call_avatar.dart';
+import '../widgets/character_avatar_image.dart';
 import '../widgets/hangup_button.dart';
 import '../widgets/incoming_call_actions.dart';
 
@@ -245,8 +246,9 @@ class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
               imageFilter: ImageFilter.blur(sigmaX: 44, sigmaY: 44),
               child: Transform.scale(
                 scale: 1.25,
-                child: Image.asset(
-                  widget.character.avatar.value,
+                child: CharacterAvatarImage(
+                  avatar: widget.character.avatar,
+                  fallbackColor: widget.character.themeColor,
                   fit: BoxFit.cover,
                 ),
               ),

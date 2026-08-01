@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../controllers/call_state.dart';
 import '../models/character.dart';
+import 'character_avatar_image.dart';
 
 class CallAvatar extends StatefulWidget {
   const CallAvatar({required this.character, required this.phase, super.key});
@@ -79,7 +80,11 @@ class _CallAvatarState extends State<CallAvatar>
           ],
         ),
         child: ClipOval(
-          child: Image.asset(widget.character.avatar.value, fit: BoxFit.cover),
+          child: CharacterAvatarImage(
+            avatar: widget.character.avatar,
+            fallbackColor: widget.character.themeColor,
+            fit: BoxFit.cover,
+          ),
         ),
       ),
     );
