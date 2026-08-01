@@ -1,6 +1,6 @@
 # 儿童 AI 角色语音电话 MVP
 
-这是一个供内部验证使用的 Flutter Android + FastAPI 语音对话项目。孩子从两个角色中选择一个进入通话页；Flutter 本地 VAD 自动检测说话和静音，通过 WebSocket 上传 PCM；后端依次调用 MiMo ASR、LangChain Agent 和 MiMo TTS，再把 PCM 音频流返回 App。
+这是一个供内部验证使用的 Flutter Android + FastAPI 语音对话项目。孩子从预置或本地自建角色中选择一个进入通话页；Flutter 本地 VAD 自动检测说话和静音，通过 WebSocket 上传 PCM；后端依次调用 MiMo ASR、LangChain Agent 和 MiMo TTS，再把 PCM 音频流返回 App。
 
 > “莱德”仅用于内部原型验证。仓库不包含受保护角色形象或演员克隆音色，默认使用中性 “R” 头像和 MiMo 预置音色。
 
@@ -153,12 +153,56 @@ Voice Clone 配置：
 
 参考音频路径相对于 `server/app/config/`。只允许使用获得明确授权的 MP3/WAV，严禁克隆演员或其他未经授权的声音。Voice Design 和 Voice Clone 当前不是低延迟真流式，首音频会比预置音色慢。
 
+### 新建自定义角色
+
+角色列表末尾的“新建角色”入口可创建仅保存在当前设备上的角色。自建角色显示“我的角色”标记，并可从卡片菜单编辑或删除；预置角色不可编辑或删除。通话前临时切换音色只影响当次通话，返回列表后恢复角色保存的默认音色。
+
+应用使用 Android App 私有存储保存版本化角色元数据、相册头像副本和克隆参考音频副本，不依赖稳定的 Android 绝对路径。应用不提供账号、云同步、分享或云备份功能。删除自建角色时，会先提交元数据变更，再尽力删除该角色的本地头像和参考音频；卸载或清除应用数据也会移除这些本地内容。
+
+字段和素材限制：
+
+- 名称 1–20 字；副标题 0–30 字；开场白 1–120 字；补充描述 0–200 字。
+- 必选一个身份和 1–3 个不重复性格；可选 0–3 个不重复兴趣。
+- 相册头像会在本机修正方向、居中裁成正方形，最长边不超过 1024 像素，编码后不超过 2 MB。头像不会上传到服务端。
+- 音色设计描述为 8–500 字。
+- 音色克隆仅接受非空 WAV/MP3，文件不超过 10 MB，并要求用户明确确认拥有声音使用授权。通话时参考音频会上传为临时引用，服务端不持久化角色资料，并在会话结束时清理引用。
+
+创建和编辑可离线使用随包或缓存选项。服务端通过以下接口发布权威选项目录，响应只包含 ID 和展示标签，不包含服务端 Prompt 文本：
+
+```http
+GET /api/character-options
+```
+
+自建角色通话使用结构化、受限的 `session.start` 快照，例如：
+
+```json
+{
+  "type": "session.start",
+  "characterId": "custom_20a8d1b51412447a99abc336e306f25f",
+  "customCharacter": {
+    "displayName": "星星船长",
+    "greeting": "你好呀，我是星星船长！",
+    "identityId": "adventure_companion",
+    "traitIds": ["brave", "patient"],
+    "interestIds": ["space", "science"],
+    "description": "喜欢用有趣的小实验解释问题"
+  },
+  "voiceConfig": {
+    "mode": "preset",
+    "voice": "白桦"
+  }
+}
+```
+
+客户端不会发送完整系统 Prompt、副标题、头像路径、本地音频路径或授权标记。服务端按权威目录校验快照，仅为当前会话构造角色配置，不写数据库、不加入全局角色注册表；全局儿童安全规则和回复长度限制始终优先。
+
 ## 测试
 
 后端：
 
 ```bash
 cd server
+python3 -m compileall -q app tests
 pytest -q
 ```
 
@@ -166,9 +210,19 @@ Flutter：
 
 ```bash
 cd mobile
+dart format --output=none --set-exit-if-changed lib test
 flutter test
 flutter analyze
 flutter build apk --debug
+```
+
+磁盘受限且验收设备为 arm64 时，可生成仅包含 `arm64-v8a` 的 debug APK；未设置这些环境变量时，项目仍按默认多 ABI 构建：
+
+```bash
+cd mobile
+env 'ORG_GRADLE_PROJECT_disable-abi-filtering=true' \
+  ORG_GRADLE_PROJECT_arm64Only=true \
+  flutter build apk --debug --target-platform android-arm64
 ```
 
 真实供应商烟测：
