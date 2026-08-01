@@ -92,6 +92,7 @@ class _CharacterPageState extends ConsumerState<CharacterPage> {
                       final character = catalog.characters[index];
                       return CharacterCard(
                         character: character,
+                        options: catalog.options,
                         onCall: (selection) => _startCall(character, selection),
                       );
                     },
