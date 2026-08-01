@@ -2,6 +2,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from app.character_options import CharacterOptionsRegistry
 from app.characters import CharacterRegistry
 from app.main import AppDependencies, create_app
 
@@ -22,9 +23,12 @@ class FakeTts:
 
 
 def make_test_app(ready=True):
-    config = Path(__file__).parents[1] / "app" / "config" / "characters.json"
+    config_dir = Path(__file__).parents[1] / "app" / "config"
     dependencies = AppDependencies(
-        registry=CharacterRegistry.from_path(config),
+        registry=CharacterRegistry.from_path(config_dir / "characters.json"),
+        options=CharacterOptionsRegistry.from_path(
+            config_dir / "character_options.json"
+        ),
         asr=FakeAsr(),
         agent=FakeAgent(),
         tts=FakeTts(),
@@ -43,6 +47,14 @@ def test_readiness_does_not_expose_configuration():
         response = client.get("/ready")
         assert response.status_code == 503
         assert response.json() == {"status": "not_ready"}
+
+
+def test_character_options_endpoint():
+    with TestClient(make_test_app()) as client:
+        response = client.get("/api/character-options")
+
+    assert response.status_code == 200
+    assert response.json()["optionsVersion"] == 1
 
 
 def test_websocket_rejects_binary_before_audio_start():

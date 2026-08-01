@@ -9,6 +9,7 @@ from fastapi import FastAPI, File, HTTPException, UploadFile, WebSocket, WebSock
 from fastapi.responses import JSONResponse
 
 from .agent import LangChainAgent, build_chat_model
+from .character_options import CharacterOptionsRegistry
 from .characters import CharacterRegistry
 from .config import get_settings
 from .protocol import ServerEvent, TurnError, serialize_server_event
@@ -25,6 +26,7 @@ logger = logging.getLogger(__name__)
 @dataclass(slots=True)
 class AppDependencies:
     registry: CharacterRegistry
+    options: CharacterOptionsRegistry
     asr: Any | None
     agent: Any | None
     tts: Any | None
@@ -54,8 +56,12 @@ def create_app(injected: AppDependencies | None = None) -> FastAPI:
             registry = CharacterRegistry.from_path(
                 Path(__file__).parent / "config" / "characters.json"
             )
+            options = CharacterOptionsRegistry.from_path(
+                Path(__file__).parent / "config" / "character_options.json"
+            )
             dependencies = AppDependencies(
                 registry=registry,
+                options=options,
                 asr=None,
                 agent=None,
                 tts=None,
@@ -98,6 +104,11 @@ def create_app(injected: AppDependencies | None = None) -> FastAPI:
         if not dependencies.ready:
             return JSONResponse({"status": "not_ready"}, status_code=503)
         return {"status": "ready"}
+
+    @app.get("/api/character-options")
+    async def character_options() -> dict[str, object]:
+        dependencies: AppDependencies = app.state.dependencies
+        return dependencies.options.public_payload()
 
     @app.post("/api/voice-references", status_code=201)
     async def upload_voice_reference(file: UploadFile = File(...)):
