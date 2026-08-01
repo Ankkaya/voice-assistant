@@ -1,0 +1,35 @@
+{
+  "optionsVersion": 1,
+  "identities": [
+    {"id": "adventure_companion", "label": "探险伙伴"},
+    {"id": "story_partner", "label": "故事伙伴"},
+    {"id": "science_partner", "label": "科学伙伴"},
+    {"id": "learning_partner", "label": "学习伙伴"},
+    {"id": "animal_friend", "label": "动物朋友"},
+    {"id": "fantasy_friend", "label": "奇幻伙伴"}
+  ],
+  "traits": [
+    {"id": "brave", "label": "勇敢"},
+    {"id": "patient", "label": "耐心"},
+    {"id": "humorous", "label": "幽默"},
+    {"id": "gentle", "label": "温柔"},
+    {"id": "curious", "label": "好奇"},
+    {"id": "calm", "label": "沉稳"},
+    {"id": "lively", "label": "活泼"},
+    {"id": "encouraging", "label": "爱鼓励"}
+  ],
+  "interests": [
+    {"id": "adventure", "label": "探险"},
+    {"id": "stories", "label": "故事"},
+    {"id": "science", "label": "科学"},
+    {"id": "space", "label": "太空"},
+    {"id": "nature", "label": "自然"},
+    {"id": "animals", "label": "动物"},
+    {"id": "art", "label": "艺术"},
+    {"id": "sports", "label": "运动"}
+  ],
+  "presetVoices": [
+    {"id": "白桦", "label": "白桦"},
+    {"id": "苏打", "label": "苏打"}
+  ]
+}

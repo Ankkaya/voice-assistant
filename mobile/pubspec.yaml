@@ -28,4 +28,5 @@ flutter:
   uses-material-design: true
   assets:
     - assets/characters.json
+    - assets/character_options.json
     - assets/characters/
