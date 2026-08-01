@@ -129,6 +129,26 @@ void main() {
     controller.dispose();
   });
 
+  test('custom configuration error is retained in call state', () {
+    final controller = CallController(
+      character: customCharacter,
+      socket: FakeVoiceSocket(),
+    );
+
+    controller.onEvent(
+      const TurnErrorEvent(
+        stage: 'session',
+        code: 'UNSAFE_CHARACTER_CONFIG',
+        recoverable: false,
+        message: '角色设定需要修改后才能通话。',
+      ),
+    );
+
+    expect(controller.state.errorCode, 'UNSAFE_CHARACTER_CONFIG');
+    expect(controller.state.canEditCharacter, isTrue);
+    controller.dispose();
+  });
+
   test('microphone is disabled while assistant speaks', () {
     final controller = CallController(
       character: character,

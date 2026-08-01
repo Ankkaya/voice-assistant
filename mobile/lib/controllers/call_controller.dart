@@ -101,10 +101,11 @@ class CallController extends StateNotifier<CallViewState> {
         if (!_matchesActiveTurn(turnId)) return;
         state = state.copyWith(phase: CallPhase.listening, clearTurnId: true);
         break;
-      case TurnErrorEvent(:final recoverable, :final message):
+      case TurnErrorEvent(:final code, :final recoverable, :final message):
         state = state.copyWith(
           phase: recoverable ? CallPhase.listening : CallPhase.error,
           errorMessage: message,
+          errorCode: code,
           clearTurnId: true,
         );
         break;

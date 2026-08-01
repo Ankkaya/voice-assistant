@@ -11,19 +11,23 @@ class CharacterCard extends StatefulWidget {
     required this.character,
     required this.options,
     required this.onCall,
+    this.onEdit,
+    this.onDelete,
     super.key,
   });
 
   final Character character;
   final CharacterOptions options;
   final Future<void> Function(VoiceSelection selection) onCall;
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
 
   @override
   State<CharacterCard> createState() => _CharacterCardState();
 }
 
 class _CharacterCardState extends State<CharacterCard> {
-  final _voiceKey = GlobalKey<VoiceSelectorState>();
+  var _voiceKey = GlobalKey<VoiceSelectorState>();
   late VoiceSelection _selection;
   bool _busy = false;
 
@@ -39,7 +43,13 @@ class _CharacterCardState extends State<CharacterCard> {
     try {
       await widget.onCall(_voiceKey.currentState?.value ?? _selection);
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _selection = widget.character.defaultVoice;
+          _voiceKey = GlobalKey<VoiceSelectorState>();
+        });
+      }
     }
   }
 
@@ -92,9 +102,44 @@ class _CharacterCardState extends State<CharacterCard> {
                         character.displaySubtitle,
                         style: const TextStyle(color: Color(0xFF606575)),
                       ),
+                      if (character.isCustom) ...[
+                        const SizedBox(height: 7),
+                        DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: character.themeColor.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 9,
+                              vertical: 4,
+                            ),
+                            child: Text(
+                              '我的角色',
+                              style: TextStyle(
+                                color: character.themeColor,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
+                if (character.isCustom)
+                  PopupMenuButton<String>(
+                    key: Key('character_menu_${character.id}'),
+                    onSelected: (value) {
+                      if (value == 'edit') widget.onEdit?.call();
+                      if (value == 'delete') widget.onDelete?.call();
+                    },
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(value: 'edit', child: Text('编辑')),
+                      PopupMenuItem(value: 'delete', child: Text('删除')),
+                    ],
+                  ),
               ],
             ),
             const SizedBox(height: 16),

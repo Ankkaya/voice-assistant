@@ -20,6 +20,8 @@ import '../widgets/character_avatar_image.dart';
 import '../widgets/hangup_button.dart';
 import '../widgets/incoming_call_actions.dart';
 
+enum CallPageResult { ended, editCharacter }
+
 class CallPage extends StatefulWidget {
   const CallPage({
     required this.character,
@@ -27,6 +29,7 @@ class CallPage extends StatefulWidget {
     this.autoConnect = true,
     this.incomingCall = true,
     this.voiceSelection = const VoiceSelection(mode: VoiceMode.preset),
+    this.audioCleanupOverride,
     super.key,
   });
 
@@ -35,6 +38,8 @@ class CallPage extends StatefulWidget {
   final bool autoConnect;
   final bool incomingCall;
   final VoiceSelection voiceSelection;
+  @visibleForTesting
+  final Future<void> Function()? audioCleanupOverride;
 
   @override
   State<CallPage> createState() => _CallPageState();
@@ -184,7 +189,7 @@ class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
     _vad.reset();
   }
 
-  Future<void> _endCall() async {
+  Future<void> _endCall({CallPageResult result = CallPageResult.ended}) async {
     if (_ending) return;
     _ending = true;
     await _audioSubscription?.cancel();
@@ -192,8 +197,8 @@ class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
     await _eventSubscription?.cancel();
     _eventSubscription = null;
     await _controller.hangUp();
-    await _disposeAudioResources();
-    if (mounted) Navigator.of(context).pop();
+    await (widget.audioCleanupOverride?.call() ?? _disposeAudioResources());
+    if (mounted) Navigator.of(context).pop(result);
   }
 
   Future<void> _disposeAudioResources() async {
@@ -323,10 +328,48 @@ class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
                         AnimatedSwitcher(
                           duration: const Duration(milliseconds: 250),
                           child: _accepted
-                              ? HangupButton(
-                                  key: const ValueKey('active_call_actions'),
-                                  onPressed: () => unawaited(_endCall()),
-                                )
+                              ? widget.character.isCustom &&
+                                        _viewState.phase == CallPhase.error &&
+                                        _viewState.canEditCharacter
+                                    ? Column(
+                                        key: const ValueKey(
+                                          'character_error_actions',
+                                        ),
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          FilledButton.icon(
+                                            key: const Key(
+                                              'edit_character_after_error',
+                                            ),
+                                            onPressed: () => _endCall(
+                                              result:
+                                                  CallPageResult.editCharacter,
+                                            ),
+                                            icon: const Icon(
+                                              Icons.edit_rounded,
+                                            ),
+                                            label: const Text('编辑角色'),
+                                          ),
+                                          const SizedBox(height: 10),
+                                          TextButton(
+                                            key: const Key(
+                                              'back_to_characters_after_error',
+                                            ),
+                                            onPressed: () =>
+                                                unawaited(_endCall()),
+                                            style: TextButton.styleFrom(
+                                              foregroundColor: Colors.white,
+                                            ),
+                                            child: const Text('返回角色列表'),
+                                          ),
+                                        ],
+                                      )
+                                    : HangupButton(
+                                        key: const ValueKey(
+                                          'active_call_actions',
+                                        ),
+                                        onPressed: () => unawaited(_endCall()),
+                                      )
                               : IncomingCallActions(
                                   key: const ValueKey('incoming_call_actions'),
                                   onDecline: () => unawaited(_endCall()),

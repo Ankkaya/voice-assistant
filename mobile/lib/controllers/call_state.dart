@@ -18,12 +18,22 @@ class CallViewState {
     this.elapsed = Duration.zero,
     this.currentTurnId,
     this.errorMessage,
+    this.errorCode,
   });
 
   final CallPhase phase;
   final Duration elapsed;
   final String? currentTurnId;
   final String? errorMessage;
+  final String? errorCode;
+
+  bool get canEditCharacter => const {
+    'INVALID_CHARACTER_CONFIG',
+    'UNSUPPORTED_CHARACTER_OPTION',
+    'UNSAFE_CHARACTER_CONFIG',
+    'UNSUPPORTED_PRESET_VOICE',
+    'VOICE_REFERENCE_NOT_FOUND',
+  }.contains(errorCode);
 
   bool get microphoneEnabled =>
       phase == CallPhase.listening || phase == CallPhase.userSpeaking;
@@ -34,6 +44,7 @@ class CallViewState {
     String? currentTurnId,
     bool clearTurnId = false,
     String? errorMessage,
+    String? errorCode,
     bool clearError = false,
   }) {
     return CallViewState(
@@ -41,6 +52,7 @@ class CallViewState {
       elapsed: elapsed ?? this.elapsed,
       currentTurnId: clearTurnId ? null : currentTurnId ?? this.currentTurnId,
       errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
+      errorCode: clearError ? null : errorCode ?? this.errorCode,
     );
   }
 
