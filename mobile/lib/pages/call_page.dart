@@ -245,7 +245,10 @@ class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
               imageFilter: ImageFilter.blur(sigmaX: 44, sigmaY: 44),
               child: Transform.scale(
                 scale: 1.25,
-                child: Image.asset(widget.character.avatar, fit: BoxFit.cover),
+                child: Image.asset(
+                  widget.character.avatar.value,
+                  fit: BoxFit.cover,
+                ),
               ),
             ),
             ColoredBox(color: Colors.black.withValues(alpha: 0.58)),

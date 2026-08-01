@@ -59,10 +59,18 @@ class CallController extends StateNotifier<CallViewState> {
     _eventSubscription = socket.events.listen(onEvent, onError: onSocketError);
     _audioSubscription = socket.audioChunks.listen(_assistantAudio.add);
     state = state.copyWith(phase: CallPhase.ringing);
+    final selectedVoice = voiceSelection ?? character.defaultVoice;
+    final includePreset =
+        character.isCustom ||
+        (voiceSelection != null &&
+            selectedVoice.mode == VoiceMode.preset &&
+            selectedVoice.presetVoice != null &&
+            selectedVoice.presetVoice != character.defaultVoice.presetVoice);
     socket.sendEvent(
       VoiceClientEvent.sessionStart(
         character.id,
-        voiceSelection?.toProtocolJson(),
+        customCharacter: character.customCharacterProtocolJson,
+        voiceConfig: selectedVoice.toProtocolJson(includePreset: includePreset),
       ),
     );
   }

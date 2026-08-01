@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:child_voice_call/controllers/call_controller.dart';
 import 'package:child_voice_call/controllers/call_state.dart';
 import 'package:child_voice_call/models/character.dart';
+import 'package:child_voice_call/models/voice_selection.dart';
 import 'package:child_voice_call/protocol/voice_event.dart';
 import 'package:child_voice_call/websocket/voice_socket.dart';
 import 'package:flutter/material.dart';
@@ -46,12 +47,88 @@ const character = Character(
   id: 'ryder',
   name: '莱德',
   subtitle: '救援队长',
-  avatar: 'assets/characters/ryder.png',
+  avatar: CharacterAvatarRef.asset('assets/characters/ryder.png'),
   defaultVoiceDescription: '明亮友好的少年声音',
+  defaultVoice: VoiceSelection(mode: VoiceMode.preset, presetVoice: '苏打'),
   themeColor: Colors.red,
 );
 
+const customCharacter = Character(
+  id: 'custom_20a8d1b51412447a99abc336e306f25f',
+  name: '星星船长',
+  subtitle: '',
+  avatar: CharacterAvatarRef.localFile('/data/app-support/avatars/star.jpg'),
+  defaultVoiceDescription: '',
+  defaultVoice: VoiceSelection(mode: VoiceMode.preset, presetVoice: '白桦'),
+  themeColor: Color(0xff5b7cfa),
+  source: CharacterSource.custom,
+  profile: CustomCharacterProfile(
+    identityId: 'adventure_companion',
+    traitIds: ['brave', 'patient'],
+    interestIds: ['space'],
+    description: '喜欢一起观察星星',
+  ),
+  greeting: '你好呀，我是星星船长！',
+);
+
 void main() {
+  test('bundled default call keeps legacy session start shape', () async {
+    final socket = FakeVoiceSocket();
+    final controller = CallController(character: character, socket: socket);
+
+    await controller.connect(Uri.parse('ws://localhost/voice'));
+
+    expect(socket.sentEvents.single, {
+      'type': 'session.start',
+      'characterId': 'ryder',
+    });
+    controller.dispose();
+  });
+
+  test('custom call sends structured snapshot and explicit voice', () async {
+    final socket = FakeVoiceSocket();
+    final controller = CallController(
+      character: customCharacter,
+      socket: socket,
+    );
+
+    await controller.connect(Uri.parse('ws://localhost/voice'));
+
+    expect(socket.sentEvents.single['customCharacter'], {
+      'displayName': '星星船长',
+      'greeting': '你好呀，我是星星船长！',
+      'identityId': 'adventure_companion',
+      'traitIds': ['brave', 'patient'],
+      'interestIds': ['space'],
+      'description': '喜欢一起观察星星',
+    });
+    expect(socket.sentEvents.single['voiceConfig'], {
+      'mode': 'preset',
+      'voice': '白桦',
+    });
+    controller.dispose();
+  });
+
+  test('bundled temporary preset sends only the changed voice', () async {
+    final socket = FakeVoiceSocket();
+    final controller = CallController(character: character, socket: socket);
+
+    await controller.connect(
+      Uri.parse('ws://localhost/voice'),
+      voiceSelection: const VoiceSelection(
+        mode: VoiceMode.preset,
+        presetVoice: '白桦',
+      ),
+    );
+
+    expect(socket.sentEvents.single, {
+      'type': 'session.start',
+      'characterId': 'ryder',
+      'voiceConfig': {'mode': 'preset', 'voice': '白桦'},
+    });
+    controller.dispose();
+  });
+
   test('microphone is disabled while assistant speaks', () {
     final controller = CallController(
       character: character,

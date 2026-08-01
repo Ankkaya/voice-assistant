@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:child_voice_call/controllers/call_controller.dart';
 import 'package:child_voice_call/controllers/call_state.dart';
 import 'package:child_voice_call/models/character.dart';
+import 'package:child_voice_call/models/voice_selection.dart';
 import 'package:child_voice_call/pages/call_page.dart';
 import 'package:child_voice_call/protocol/voice_event.dart';
 import 'package:child_voice_call/websocket/voice_socket.dart';
@@ -31,8 +32,9 @@ const character = Character(
   id: 'ryder',
   name: '莱德',
   subtitle: '救援队长',
-  avatar: 'assets/characters/ryder.png',
+  avatar: CharacterAvatarRef.asset('assets/characters/ryder.png'),
   defaultVoiceDescription: '明亮友好的少年声音',
+  defaultVoice: VoiceSelection(mode: VoiceMode.preset, presetVoice: '苏打'),
   themeColor: Colors.red,
 );
 

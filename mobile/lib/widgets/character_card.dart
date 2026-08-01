@@ -84,6 +84,9 @@ class _CharacterCardState extends State<CharacterCard> {
       await widget.onCall(
         VoiceSelection(
           mode: _mode,
+          presetVoice: _mode == VoiceMode.preset
+              ? widget.character.defaultVoice.presetVoice
+              : null,
           voiceDescription: description,
           referencePath: _referencePath,
           referenceName: _referenceName,
@@ -121,7 +124,10 @@ class _CharacterCardState extends State<CharacterCard> {
                     shape: BoxShape.circle,
                   ),
                   child: ClipOval(
-                    child: Image.asset(character.avatar, fit: BoxFit.cover),
+                    child: Image.asset(
+                      character.avatar.value,
+                      fit: BoxFit.cover,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 16),

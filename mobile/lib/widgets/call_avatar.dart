@@ -79,7 +79,7 @@ class _CallAvatarState extends State<CallAvatar>
           ],
         ),
         child: ClipOval(
-          child: Image.asset(widget.character.avatar, fit: BoxFit.cover),
+          child: Image.asset(widget.character.avatar.value, fit: BoxFit.cover),
         ),
       ),
     );

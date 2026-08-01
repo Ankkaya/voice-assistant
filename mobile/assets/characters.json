@@ -4,6 +4,7 @@
     "name": "拉布拉多队长",
     "subtitle": "勇敢又温暖的探险伙伴",
     "avatar": "assets/characters/labrador_captain.png",
+    "defaultPresetVoice": "白桦",
     "defaultVoiceDescription": "一位成年男性拉布拉多警长的声音，中低音温暖厚实，沉稳可靠又亲切耐心；普通话清晰，语速中等稍慢。调查线索时专注敏锐，提醒安全时坚定但不严厉，聊天时带一点活泼和关怀，具有干净自然的儿童安全动画录音棚质感。",
     "themeColor": "#E7A93B"
   },
@@ -12,6 +13,7 @@
     "name": "莱德",
     "subtitle": "乐于助人的救援队长",
     "avatar": "assets/characters/ryder.png",
+    "defaultPresetVoice": "苏打",
     "defaultVoiceDescription": "十岁左右少年队长的男声，音色明亮清晰、聪明自信、友好有活力；普通话标准，语速中等稍快。组织救援时果断镇定，和孩子聊天时温暖鼓励，保留少年感但不过度幼态，具有自然清爽的动画少年领队质感。",
     "themeColor": "#E64B4B"
   }
