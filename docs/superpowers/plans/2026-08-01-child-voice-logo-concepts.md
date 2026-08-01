@@ -71,7 +71,7 @@ PYTHONPATH=.python-deps python3 /data/home/.codex/skills/.system/imagegen/script
   --input output/imagegen/child-voice-logo-concepts/prompts.jsonl \
   --out-dir output/imagegen/child-voice-logo-concepts \
   --concurrency 3 \
-  --no-augment \
+  --augment \
   --dry-run
 ```
 
@@ -87,7 +87,7 @@ PYTHONPATH=.python-deps python3 /data/home/.codex/skills/.system/imagegen/script
   --out-dir output/imagegen/child-voice-logo-concepts \
   --concurrency 3 \
   --max-attempts 3 \
-  --no-augment
+  --augment
 ```
 
 Expected: exit code `0`; the output directory contains six non-empty PNG candidate files with the exact stable names listed above.
@@ -177,4 +177,3 @@ Expected: one commit containing only the two derived review images.
 - [ ] **Step 6: Hand off the candidates for user selection**
 
 Report the exact output directory, model (`gpt-image-2`), quality (`high`), the final prompt-set path, and clickable links to the contact sheet and each recommended candidate. Ask the user to choose one candidate before any refinement or SVG vectorization work begins.
-
