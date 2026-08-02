@@ -1,12 +1,13 @@
+import 'package:child_voice_call/models/character_options.dart';
 import 'package:child_voice_call/models/voice_selection.dart';
-import 'package:child_voice_call/pages/character_editor_page.dart';
 import 'package:child_voice_call/widgets/voice_selector.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'character_editor_page_test.dart'
-    show editorOptions, fillValidCharacterForm, savedCharacter;
+const selectorOptions = [
+  PresetVoiceOption(id: '白桦', label: '白桦'),
+  PresetVoiceOption(id: '苏打', label: '苏打'),
+];
 
 class FakeVoicePicker implements VoiceReferencePicker {
   PickedVoiceReference? result;
@@ -14,12 +15,22 @@ class FakeVoicePicker implements VoiceReferencePicker {
   Future<PickedVoiceReference?> pick() async => result;
 }
 
-Widget voiceEditorApp(FakeVoicePicker picker) => ProviderScope(
-  child: MaterialApp(
-    home: CharacterEditorPage(
-      options: editorOptions,
-      voiceReferencePicker: picker,
-      onSave: (_) async => savedCharacter,
+Widget voiceSelectorApp(
+  FakeVoicePicker picker,
+  GlobalKey<VoiceSelectorState> selectorKey,
+) => MaterialApp(
+  home: Scaffold(
+    body: SingleChildScrollView(
+      child: VoiceSelector(
+        key: selectorKey,
+        options: selectorOptions,
+        initialValue: const VoiceSelection(
+          mode: VoiceMode.preset,
+          presetVoice: '白桦',
+        ),
+        picker: picker,
+        onChanged: (_) {},
+      ),
     ),
   ),
 );
@@ -31,23 +42,17 @@ Future<void> selectMode(WidgetTester tester, VoiceMode mode) async {
   await tester.pump();
 }
 
-Future<void> save(WidgetTester tester) async {
-  final finder = find.byKey(const Key('save_character'));
-  await tester.ensureVisible(finder);
-  await tester.tap(finder);
-  await tester.pump();
-}
-
 void main() {
   testWidgets('clone mode requires file and explicit authorization', (
     tester,
   ) async {
     final picker = FakeVoicePicker();
-    await tester.pumpWidget(voiceEditorApp(picker));
-    await fillValidCharacterForm(tester);
+    final selectorKey = GlobalKey<VoiceSelectorState>();
+    await tester.pumpWidget(voiceSelectorApp(picker, selectorKey));
     await selectMode(tester, VoiceMode.voiceClone);
 
-    await save(tester);
+    expect(selectorKey.currentState?.validate(), isFalse);
+    await tester.pump();
     expect(find.text('请选择 WAV 或 MP3 参考音频'), findsOneWidget);
 
     picker.result = const PickedVoiceReference(
@@ -59,19 +64,21 @@ void main() {
     await tester.ensureVisible(pickButton);
     await tester.tap(pickButton);
     await tester.pump();
-    await save(tester);
+    expect(selectorKey.currentState?.validate(), isFalse);
+    await tester.pump();
     expect(find.text('请确认你拥有该声音的使用授权'), findsOneWidget);
   });
 
   testWidgets('voice design enforces 8 to 500 characters', (tester) async {
     final picker = FakeVoicePicker();
-    await tester.pumpWidget(voiceEditorApp(picker));
-    await fillValidCharacterForm(tester);
+    final selectorKey = GlobalKey<VoiceSelectorState>();
+    await tester.pumpWidget(voiceSelectorApp(picker, selectorKey));
     await selectMode(tester, VoiceMode.voiceDesign);
     final description = find.byKey(const Key('voice_description'));
     await tester.enterText(description, '太短');
 
-    await save(tester);
+    expect(selectorKey.currentState?.validate(), isFalse);
+    await tester.pump();
 
     expect(find.text('请至少用 8 个字描述希望生成的音色'), findsOneWidget);
   });

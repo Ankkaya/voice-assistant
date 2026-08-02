@@ -3,6 +3,7 @@ import 'package:child_voice_call/models/character_options.dart';
 import 'package:child_voice_call/models/voice_selection.dart';
 import 'package:child_voice_call/pages/character_editor_page.dart';
 import 'package:child_voice_call/widgets/character_avatar_picker.dart';
+import 'package:child_voice_call/widgets/voice_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -22,6 +23,14 @@ const editorOptions = CharacterOptions(
     PresetVoiceOption(id: '白桦', label: '白桦'),
     PresetVoiceOption(id: '苏打', label: '苏打'),
   ],
+);
+
+const editorOptionsWithoutVoices = CharacterOptions(
+  optionsVersion: 1,
+  identities: [CharacterOption(id: 'adventure_companion', label: '探险伙伴')],
+  traits: [CharacterOption(id: 'brave', label: '勇敢')],
+  interests: [],
+  presetVoices: [],
 );
 
 const savedCharacter = Character(
@@ -79,9 +88,51 @@ Future<void> tapSave(WidgetTester tester) async {
 }
 
 void main() {
-  testWidgets('requires name identity trait and voice before save', (
+  testWidgets('edits profile without exposing voice settings', (tester) async {
+    await tester.pumpWidget(editorApp());
+
+    expect(find.text('默认音色'), findsNothing);
+    expect(find.byType(VoiceSelector), findsNothing);
+  });
+
+  testWidgets('shows an options error when no preset voice is available', (
     tester,
   ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          home: CharacterEditorPage(
+            options: editorOptionsWithoutVoices,
+            onSave: (_) async => savedCharacter,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('角色选项加载失败'), findsOneWidget);
+    expect(find.textContaining('没有可用的预置音色'), findsOneWidget);
+  });
+
+  testWidgets('existing character remains editable without preset options', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const ProviderScope(
+        child: MaterialApp(
+          home: CharacterEditorPage(
+            character: savedCharacter,
+            options: editorOptionsWithoutVoices,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('角色选项加载失败'), findsNothing);
+    expect(find.byKey(const Key('character_name')), findsOneWidget);
+    expect(find.byKey(const Key('save_character')), findsOneWidget);
+  });
+
+  testWidgets('requires name identity and trait before save', (tester) async {
     await tester.pumpWidget(editorApp());
 
     await tapSave(tester);
@@ -150,6 +201,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(drafts, hasLength(1));
+    expect(drafts.single.defaultVoice.mode, VoiceMode.preset);
     expect(drafts.single.defaultVoice.presetVoice, '白桦');
     expect(find.byType(CharacterEditorPage), findsNothing);
   });
@@ -207,6 +259,7 @@ void main() {
 
     expect(drafts.single.name, '星际船长');
     expect(drafts.single.greeting, savedCharacter.greeting);
+    expect(drafts.single.defaultVoice, savedCharacter.defaultVoice);
   });
 
   testWidgets('save failure keeps editor open and shows recovery message', (

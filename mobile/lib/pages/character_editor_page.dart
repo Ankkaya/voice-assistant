@@ -7,13 +7,11 @@ import '../models/character_options.dart';
 import '../models/voice_selection.dart';
 import '../widgets/character_avatar_picker.dart';
 import '../widgets/character_profile_fields.dart';
-import '../widgets/voice_selector.dart';
 
 class CharacterEditorPage extends ConsumerStatefulWidget {
   const CharacterEditorPage({
     this.character,
     this.avatarPicker,
-    this.voiceReferencePicker,
     this.options,
     this.onSave,
     super.key,
@@ -21,7 +19,6 @@ class CharacterEditorPage extends ConsumerStatefulWidget {
 
   final Character? character;
   final AvatarPicker? avatarPicker;
-  final VoiceReferencePicker? voiceReferencePicker;
   final CharacterOptions? options;
   final Future<Character> Function(CustomCharacterDraft draft)? onSave;
 
@@ -32,7 +29,6 @@ class CharacterEditorPage extends ConsumerStatefulWidget {
 
 class _CharacterEditorPageState extends ConsumerState<CharacterEditorPage> {
   final _formKey = GlobalKey<FormState>();
-  final _voiceKey = GlobalKey<VoiceSelectorState>();
   late final TextEditingController _nameController;
   late final TextEditingController _subtitleController;
   late final TextEditingController _greetingController;
@@ -42,7 +38,6 @@ class _CharacterEditorPageState extends ConsumerState<CharacterEditorPage> {
   late String? _identityId;
   late Set<String> _traitIds;
   late Set<String> _interestIds;
-  late VoiceSelection _voice;
   bool _greetingEdited = false;
   bool _settingGreeting = false;
   bool _saving = false;
@@ -69,8 +64,6 @@ class _CharacterEditorPageState extends ConsumerState<CharacterEditorPage> {
     _identityId = character?.profile?.identityId;
     _traitIds = {...?character?.profile?.traitIds};
     _interestIds = {...?character?.profile?.interestIds};
-    _voice =
-        character?.defaultVoice ?? const VoiceSelection(mode: VoiceMode.preset);
     _greetingEdited = character != null;
   }
 
@@ -102,7 +95,7 @@ class _CharacterEditorPageState extends ConsumerState<CharacterEditorPage> {
     if (!_settingGreeting) _greetingEdited = true;
   }
 
-  Future<void> _save() async {
+  Future<void> _save(CharacterOptions options) async {
     FocusScope.of(context).unfocus();
     final formValid = _formKey.currentState?.validate() ?? false;
     final identityValid = (_identityId ?? '').isNotEmpty;
@@ -111,10 +104,14 @@ class _CharacterEditorPageState extends ConsumerState<CharacterEditorPage> {
       _identityError = identityValid ? null : '请选择角色身份';
       _traitsError = traitsValid ? null : '至少选择一个性格';
     });
-    final voiceValid = _voiceKey.currentState?.validate() ?? false;
-    if (!formValid || !identityValid || !traitsValid || !voiceValid) return;
+    if (!formValid || !identityValid || !traitsValid) return;
 
-    final voice = _voiceKey.currentState!.value;
+    final defaultVoice =
+        widget.character?.defaultVoice ??
+        VoiceSelection(
+          mode: VoiceMode.preset,
+          presetVoice: options.presetVoices.first.id,
+        );
     final draft = CustomCharacterDraft(
       name: _nameController.text.trim(),
       subtitle: _subtitleController.text.trim(),
@@ -127,7 +124,7 @@ class _CharacterEditorPageState extends ConsumerState<CharacterEditorPage> {
         description: _descriptionController.text.trim(),
       ),
       greeting: _greetingController.text.trim(),
-      defaultVoice: voice,
+      defaultVoice: defaultVoice,
     );
     setState(() => _saving = true);
     try {
@@ -161,6 +158,24 @@ class _CharacterEditorPageState extends ConsumerState<CharacterEditorPage> {
         body: catalog?.hasError == true
             ? const Center(child: Text('角色选项加载失败'))
             : const Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (widget.character == null && options.presetVoices.isEmpty) {
+      return Scaffold(
+        appBar: AppBar(title: Text(widget.character == null ? '新建角色' : '编辑角色')),
+        body: const Center(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('角色选项加载失败'),
+                SizedBox(height: 8),
+                Text('没有可用的预置音色，请检查角色选项配置'),
+              ],
+            ),
+          ),
+        ),
       );
     }
 
@@ -275,21 +290,9 @@ class _CharacterEditorPageState extends ConsumerState<CharacterEditorPage> {
                   },
                 ),
                 const SizedBox(height: 28),
-                _sectionTitle('默认音色'),
-                VoiceSelector(
-                  key: _voiceKey,
-                  options: options.presetVoices,
-                  initialValue: _voice,
-                  picker:
-                      widget.voiceReferencePicker ??
-                      const FilePickerVoiceReferencePicker(),
-                  enabled: !_saving,
-                  onChanged: (value) => _voice = value,
-                ),
-                const SizedBox(height: 28),
                 FilledButton.icon(
                   key: const Key('save_character'),
-                  onPressed: _saving ? null : _save,
+                  onPressed: _saving ? null : () => _save(options),
                   icon: _saving
                       ? const SizedBox(
                           width: 18,

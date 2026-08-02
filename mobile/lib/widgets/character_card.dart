@@ -1,181 +1,138 @@
 import 'package:flutter/material.dart';
 
 import '../models/character.dart';
-import '../models/character_options.dart';
-import '../models/voice_selection.dart';
 import 'character_avatar_image.dart';
-import 'voice_selector.dart';
 
-class CharacterCard extends StatefulWidget {
+class CharacterCard extends StatelessWidget {
   const CharacterCard({
     required this.character,
-    required this.options,
-    required this.onCall,
-    this.onEdit,
-    this.onDelete,
+    required this.onInvite,
+    this.busy = false,
     super.key,
   });
 
   final Character character;
-  final CharacterOptions options;
-  final Future<void> Function(VoiceSelection selection) onCall;
-  final VoidCallback? onEdit;
-  final VoidCallback? onDelete;
-
-  @override
-  State<CharacterCard> createState() => _CharacterCardState();
-}
-
-class _CharacterCardState extends State<CharacterCard> {
-  var _voiceKey = GlobalKey<VoiceSelectorState>();
-  late VoiceSelection _selection;
-  bool _busy = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _selection = widget.character.defaultVoice;
-  }
-
-  Future<void> _call() async {
-    if (!(_voiceKey.currentState?.validate() ?? false)) return;
-    setState(() => _busy = true);
-    try {
-      await widget.onCall(_voiceKey.currentState?.value ?? _selection);
-    } finally {
-      if (mounted) {
-        setState(() {
-          _busy = false;
-          _selection = widget.character.defaultVoice;
-          _voiceKey = GlobalKey<VoiceSelectorState>();
-        });
-      }
-    }
-  }
+  final VoidCallback? onInvite;
+  final bool busy;
 
   @override
   Widget build(BuildContext context) {
-    final character = widget.character;
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      elevation: 0,
-      color: Colors.white,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(24),
-        side: BorderSide(color: character.themeColor.withValues(alpha: 0.18)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
+    final themeColor = character.themeColor;
+    const actionColor = Color(0xFF3D4660);
+    return Semantics(
+      button: true,
+      enabled: !busy && onInvite != null,
+      label: '邀请${character.name}给你打电话',
+      child: Card(
+        clipBehavior: Clip.antiAlias,
+        elevation: 2,
+        shadowColor: themeColor.withValues(alpha: 0.13),
+        color: Color.alphaBlend(
+          themeColor.withValues(alpha: 0.055),
+          Colors.white,
+        ),
+        margin: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: BorderSide(color: themeColor.withValues(alpha: 0.20)),
+        ),
+        child: InkWell(
+          key: Key('character_${character.id}'),
+          onTap: busy ? null : onInvite,
+          borderRadius: BorderRadius.circular(24),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
               children: [
                 Container(
-                  width: 82,
-                  height: 82,
+                  width: 92,
+                  height: 92,
                   padding: const EdgeInsets.all(5),
                   decoration: BoxDecoration(
-                    color: character.themeColor.withValues(alpha: 0.10),
+                    color: themeColor.withValues(alpha: 0.12),
                     shape: BoxShape.circle,
                   ),
                   child: ClipOval(
                     child: CharacterAvatarImage(
                       avatar: character.avatar,
-                      fallbackColor: character.themeColor,
+                      fallbackColor: themeColor,
                     ),
                   ),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
                   child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         character.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          color: const Color(0xFF252A3A),
                           fontWeight: FontWeight.w800,
                         ),
                       ),
                       const SizedBox(height: 5),
                       Text(
                         character.displaySubtitle,
-                        style: const TextStyle(color: Color(0xFF606575)),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Color(0xFF606575),
+                          fontSize: 14,
+                          height: 1.3,
+                        ),
                       ),
-                      if (character.isCustom) ...[
-                        const SizedBox(height: 7),
-                        DecoratedBox(
-                          decoration: BoxDecoration(
-                            color: character.themeColor.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 9,
-                              vertical: 4,
+                      const SizedBox(height: 9),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (busy)
+                            SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.2,
+                                color: actionColor,
+                              ),
+                            )
+                          else
+                            Icon(
+                              Icons.phone_in_talk_rounded,
+                              size: 19,
+                              color: actionColor,
                             ),
+                          const SizedBox(width: 7),
+                          Flexible(
                             child: Text(
-                              '我的角色',
+                              busy ? '正在邀请…' : '邀请来电',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: TextStyle(
-                                color: character.themeColor,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
+                                color: actionColor,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w800,
                               ),
                             ),
                           ),
-                        ),
-                      ],
+                          if (!busy) ...[
+                            const SizedBox(width: 2),
+                            Icon(
+                              Icons.arrow_forward_rounded,
+                              size: 18,
+                              color: actionColor,
+                            ),
+                          ],
+                        ],
+                      ),
                     ],
                   ),
                 ),
-                if (character.isCustom)
-                  PopupMenuButton<String>(
-                    key: Key('character_menu_${character.id}'),
-                    onSelected: (value) {
-                      if (value == 'edit') widget.onEdit?.call();
-                      if (value == 'delete') widget.onDelete?.call();
-                    },
-                    itemBuilder: (_) => const [
-                      PopupMenuItem(value: 'edit', child: Text('编辑')),
-                      PopupMenuItem(value: 'delete', child: Text('删除')),
-                    ],
-                  ),
               ],
             ),
-            const SizedBox(height: 16),
-            VoiceSelector(
-              key: _voiceKey,
-              keyPrefix: character.id,
-              options: widget.options.presetVoices,
-              initialValue: character.defaultVoice,
-              enabled: !_busy,
-              onChanged: (value) => _selection = value,
-            ),
-            const SizedBox(height: 16),
-            FilledButton.icon(
-              key: Key('character_${character.id}'),
-              onPressed: _busy ? null : _call,
-              style: FilledButton.styleFrom(
-                backgroundColor: character.themeColor,
-                foregroundColor: Colors.white,
-                minimumSize: const Size.fromHeight(50),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-              ),
-              icon: _busy
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Icon(Icons.call_rounded),
-              label: Text(_busy ? '正在准备音色…' : '给${character.name}打电话'),
-            ),
-          ],
+          ),
         ),
       ),
     );
