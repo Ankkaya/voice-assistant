@@ -9,16 +9,17 @@ import '../models/voice_selection.dart';
 import '../services/voice_reference_uploader.dart';
 import '../widgets/character_card.dart';
 import 'call_page.dart';
+import 'character_editor_page.dart';
 
 class CharacterPage extends ConsumerStatefulWidget {
   const CharacterPage({
-    this.parentSettingsBuilder,
+    this.characterSettingsBuilder,
     this.voiceReferenceUploader,
     this.referenceExists,
     super.key,
   });
 
-  final Widget Function(BuildContext, String?)? parentSettingsBuilder;
+  final Widget Function(BuildContext, String)? characterSettingsBuilder;
   final VoiceReferenceUploader? voiceReferenceUploader;
   final Future<bool> Function(String path)? referenceExists;
 
@@ -44,13 +45,20 @@ class _CharacterPageState extends ConsumerState<CharacterPage> {
     super.dispose();
   }
 
-  Future<void> _openParentSettings([String? characterId]) async {
-    final settingsBuilder = widget.parentSettingsBuilder;
+  Future<void> _openCharacterSettings(String characterId) async {
+    final settingsBuilder = widget.characterSettingsBuilder;
     if (settingsBuilder == null) return;
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (routeContext) => settingsBuilder(routeContext, characterId),
       ),
+    );
+  }
+
+  Future<void> _openNewCharacter() async {
+    if (_busyCharacterId != null) return;
+    await Navigator.of(context).push<Character>(
+      MaterialPageRoute<Character>(builder: (_) => const CharacterEditorPage()),
     );
   }
 
@@ -79,7 +87,7 @@ class _CharacterPageState extends ConsumerState<CharacterPage> {
         ),
       );
       if (result == CallPageResult.editCharacter && mounted) {
-        await _openParentSettings(character.id);
+        await _openCharacterSettings(character.id);
       }
     } on Object {
       if (!mounted) return;
@@ -115,34 +123,8 @@ class _CharacterPageState extends ConsumerState<CharacterPage> {
     return Scaffold(
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+          padding: const EdgeInsets.fromLTRB(20, 28, 20, 32),
           children: [
-            Align(
-              alignment: Alignment.centerRight,
-              child: Semantics(
-                button: true,
-                label: '打开家长设置',
-                child: OutlinedButton.icon(
-                  key: const Key('parent_settings_button'),
-                  onPressed: _busyCharacterId == null
-                      ? _openParentSettings
-                      : null,
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: const Size(0, 48),
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                  icon: const Icon(Icons.family_restroom_rounded, size: 20),
-                  label: const Text(
-                    '家长设置',
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
             Text(
               '今天想邀请谁给你打电话？',
               style: Theme.of(context).textTheme.headlineMedium?.copyWith(
@@ -165,7 +147,7 @@ class _CharacterPageState extends ConsumerState<CharacterPage> {
             characters.when(
               data: (catalog) {
                 if (catalog.characters.isEmpty) {
-                  return _EmptyCharacters(onOpenSettings: _openParentSettings);
+                  return _EmptyCharacters(onCreateCharacter: _openNewCharacter);
                 }
                 return Column(
                   children: [
@@ -181,8 +163,15 @@ class _CharacterPageState extends ConsumerState<CharacterPage> {
                         onInvite: _busyCharacterId == null
                             ? () => _startCall(catalog.characters[index])
                             : null,
+                        onEdit: _busyCharacterId == null
+                            ? () => _openCharacterSettings(
+                                catalog.characters[index].id,
+                              )
+                            : null,
                       ),
                     ],
+                    const SizedBox(height: 18),
+                    _CreateCharacterCard(onPressed: _openNewCharacter),
                   ],
                 );
               },
@@ -293,9 +282,9 @@ class _CatalogFailure extends StatelessWidget {
 }
 
 class _EmptyCharacters extends StatelessWidget {
-  const _EmptyCharacters({required this.onOpenSettings});
+  const _EmptyCharacters({required this.onCreateCharacter});
 
-  final VoidCallback onOpenSettings;
+  final VoidCallback onCreateCharacter;
 
   @override
   Widget build(BuildContext context) => _CatalogMessage(
@@ -303,11 +292,48 @@ class _EmptyCharacters extends StatelessWidget {
     title: '还没有可以邀请的伙伴',
     message: '请家长先添加一位伙伴',
     action: FilledButton.icon(
-      key: const Key('empty_parent_settings_button'),
-      onPressed: onOpenSettings,
+      key: const Key('empty_create_character_button'),
+      onPressed: onCreateCharacter,
       style: FilledButton.styleFrom(minimumSize: const Size(0, 48)),
-      icon: const Icon(Icons.family_restroom_rounded),
-      label: const Text('请家长添加角色'),
+      icon: const Icon(Icons.add_rounded),
+      label: const Text('新建角色'),
+    ),
+  );
+}
+
+class _CreateCharacterCard extends StatelessWidget {
+  const _CreateCharacterCard({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: Colors.transparent,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(24),
+      side: const BorderSide(color: Color(0xFFD8DAE2)),
+    ),
+    child: InkWell(
+      key: const Key('create_character_card'),
+      onTap: onPressed,
+      borderRadius: BorderRadius.circular(24),
+      child: const SizedBox(
+        height: 96,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.add_circle_outline_rounded, color: Color(0xFF4E72E6)),
+            SizedBox(height: 8),
+            Text(
+              '新建角色',
+              style: TextStyle(
+                color: Color(0xFF4E72E6),
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+      ),
     ),
   );
 }

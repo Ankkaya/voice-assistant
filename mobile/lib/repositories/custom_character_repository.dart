@@ -259,6 +259,8 @@ class CustomCharacterRepository {
             'description': draft.profile.description.trim(),
           },
           'greeting': draft.greeting.trim(),
+          if (draft.promptProfile.trim().isNotEmpty)
+            'promptProfile': draft.promptProfile.trim(),
           'defaultVoice': voice,
           'createdAt': createdAt,
           'updatedAt': updatedAt,
@@ -302,6 +304,7 @@ class CustomCharacterRepository {
       themeColorValue: character.themeColor.toARGB32(),
       profile: character.profile!,
       greeting: character.greeting!,
+      promptProfile: character.promptProfile,
       defaultVoice: character.defaultVoice,
     );
     if (draft.validate().isNotEmpty) {

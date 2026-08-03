@@ -49,6 +49,7 @@ const savedCharacter = Character(
     description: '',
   ),
   greeting: '你好呀，我是星星船长！很高兴接到你的电话。',
+  promptProfile: '用温暖、有趣的方式陪伴孩子探索太空。',
 );
 
 class FakeAvatarPicker implements AvatarPicker {
@@ -253,13 +254,33 @@ void main() {
       find.byKey(const Key('character_name')),
     );
     expect(name.controller!.text, '星星船长');
+    expect(find.byKey(const Key('voice_settings_tab')), findsOneWidget);
+    expect(find.byKey(const Key('prompt_settings_tab')), findsOneWidget);
+    expect(find.byType(VoiceSelector), findsOneWidget);
+
+    await tester.ensureVisible(find.byKey(const Key('prompt_settings_tab')));
+    await tester.tap(find.byKey(const Key('prompt_settings_tab')));
+    await tester.pump();
+    final prompt = tester.widget<TextFormField>(
+      find.byKey(const Key('character_prompt_profile')),
+    );
+    expect(prompt.controller!.text, savedCharacter.promptProfile);
+    await tester.enterText(
+      find.byKey(const Key('character_prompt_profile')),
+      '保持耐心，多用太空冒险的比喻。',
+    );
 
     await tester.enterText(find.byKey(const Key('character_name')), '星际船长');
     await tapSave(tester);
 
     expect(drafts.single.name, '星际船长');
     expect(drafts.single.greeting, savedCharacter.greeting);
-    expect(drafts.single.defaultVoice, savedCharacter.defaultVoice);
+    expect(drafts.single.defaultVoice.mode, savedCharacter.defaultVoice.mode);
+    expect(
+      drafts.single.defaultVoice.presetVoice,
+      savedCharacter.defaultVoice.presetVoice,
+    );
+    expect(drafts.single.promptProfile, '保持耐心，多用太空冒险的比喻。');
   });
 
   testWidgets('save failure keeps editor open and shows recovery message', (

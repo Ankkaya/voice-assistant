@@ -20,6 +20,7 @@ class Character {
     this.source = CharacterSource.builtIn,
     this.profile,
     this.greeting,
+    this.promptProfile = '',
   });
 
   final String id;
@@ -31,6 +32,7 @@ class Character {
   final CharacterSource source;
   final CustomCharacterProfile? profile;
   final String? greeting;
+  final String promptProfile;
   final VoiceSelection defaultVoice;
 
   bool get isCustom => source == CharacterSource.custom;
@@ -53,6 +55,8 @@ class Character {
       'interestIds': List<String>.from(profile.interestIds),
       if (profile.description.trim().isNotEmpty)
         'description': profile.description,
+      if (promptProfile.trim().isNotEmpty)
+        'promptProfile': promptProfile.trim(),
     };
   }
 
@@ -94,6 +98,7 @@ class Character {
       profileJson.cast<String, Object?>(),
     );
     final greeting = _requiredString(json, 'greeting');
+    final promptProfile = (json['promptProfile'] as String?)?.trim() ?? '';
     final defaultVoice = VoiceSelection.fromStorageJson(
       voiceJson.cast<String, Object?>(),
     );
@@ -111,6 +116,7 @@ class Character {
       source: CharacterSource.custom,
       profile: profile,
       greeting: greeting,
+      promptProfile: promptProfile,
       defaultVoice: runtimeVoice,
     );
   }
@@ -133,6 +139,8 @@ class Character {
       'themeColor': _colorHex(themeColor),
       'profile': profile.toJson(),
       'greeting': greeting,
+      if (promptProfile.trim().isNotEmpty)
+        'promptProfile': promptProfile.trim(),
       'defaultVoice': voice,
     };
   }

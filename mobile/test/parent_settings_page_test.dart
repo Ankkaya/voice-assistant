@@ -449,7 +449,7 @@ void main() {
     await tester.tap(find.byKey(const Key('edit_character')));
     await tester.pumpAndSettle();
     expect(find.byType(CharacterEditorPage), findsOneWidget);
-    expect(find.text('编辑角色'), findsWidgets);
+    expect(find.text('角色编辑'), findsWidgets);
 
     await tester.pageBack();
     await tester.pumpAndSettle();

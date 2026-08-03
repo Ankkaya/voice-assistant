@@ -24,6 +24,7 @@ CUSTOM_START = {
         "traitIds": ["brave", "patient"],
         "interestIds": ["space", "science"],
         "description": "喜欢用有趣的小实验解释问题",
+        "promptProfile": "保持耐心，多用太空冒险的比喻。",
     },
     "voiceConfig": {"mode": "preset", "voice": "白桦"},
 }
@@ -46,6 +47,7 @@ def test_custom_session_start_parses():
     assert isinstance(event, SessionStart)
     assert event.custom_character is not None
     assert event.custom_character.display_name == "星星船长"
+    assert event.custom_character.prompt_profile == "保持耐心，多用太空冒险的比喻。"
     assert event.voice_config is not None
     assert event.voice_config.voice == "白桦"
 

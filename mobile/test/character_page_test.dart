@@ -6,6 +6,7 @@ import 'package:child_voice_call/models/character.dart';
 import 'package:child_voice_call/models/character_options.dart';
 import 'package:child_voice_call/models/voice_selection.dart';
 import 'package:child_voice_call/pages/call_page.dart';
+import 'package:child_voice_call/pages/character_editor_page.dart';
 import 'package:child_voice_call/pages/character_page.dart';
 import 'package:child_voice_call/repositories/bundled_character_repository.dart';
 import 'package:child_voice_call/repositories/character_options_repository.dart';
@@ -186,8 +187,8 @@ class DelayedVoiceReferenceUploader extends VoiceReferenceUploader {
   }
 }
 
-Widget _settingsPage(BuildContext context, String? characterId) =>
-    Scaffold(body: Center(child: Text('家长页面:${characterId ?? '未选择'}')));
+Widget _settingsPage(BuildContext context, String characterId) =>
+    Scaffold(body: Center(child: Text('角色页面:$characterId')));
 
 Future<ProviderContainer> pumpPage(
   WidgetTester tester, {
@@ -220,7 +221,7 @@ Future<ProviderContainer> pumpPage(
           child: child!,
         ),
         home: CharacterPage(
-          parentSettingsBuilder: _settingsPage,
+          characterSettingsBuilder: _settingsPage,
           voiceReferenceUploader: uploader,
           referenceExists: referenceExists,
         ),
@@ -248,13 +249,19 @@ void main() {
 
     expect(find.text('今天想邀请谁给你打电话？'), findsOneWidget);
     expect(find.text('选一位伙伴，稍后他会打给你'), findsOneWidget);
-    expect(find.text('家长设置'), findsOneWidget);
+    expect(find.text('家长设置'), findsNothing);
     expect(find.text('邀请来电'), findsNWidgets(bundledCharacters.length + 1));
     expect(find.text('拉布拉多队长'), findsOneWidget);
     expect(find.text('莱德'), findsOneWidget);
     expect(find.text('星星船长'), findsOneWidget);
     expect(find.text('选择音色模式'), findsNothing);
-    expect(find.text('新建角色'), findsNothing);
+    expect(find.text('新建角色'), findsOneWidget);
+    expect(find.text('系统内置'), findsNWidgets(bundledCharacters.length));
+    expect(find.text('我的角色'), findsOneWidget);
+    expect(
+      find.byKey(const Key('character_settings_labrador_captain')),
+      findsOneWidget,
+    );
     expect(find.byType(VoiceSelector), findsNothing);
   });
 
@@ -292,6 +299,7 @@ void main() {
             character: bundledCharacters.first,
             busy: true,
             onInvite: () => inviteCount += 1,
+            onEdit: () {},
           ),
         ),
       ),
@@ -335,7 +343,7 @@ void main() {
     expect(callPage.voiceSelection.presetVoice, '白桦');
   });
 
-  testWidgets('voice preparation disables parent settings navigation', (
+  testWidgets('voice preparation disables character editing navigation', (
     tester,
   ) async {
     final upload = Completer<String>();
@@ -359,8 +367,8 @@ void main() {
     await tester.tap(find.byKey(const Key('character_labrador_captain')));
     await tester.pump();
 
-    final settingsButton = tester.widget<OutlinedButton>(
-      find.byKey(const Key('parent_settings_button')),
+    final settingsButton = tester.widget<IconButton>(
+      find.byKey(const Key('character_settings_labrador_captain')),
     );
     expect(settingsButton.onPressed, isNull);
 
@@ -380,15 +388,17 @@ void main() {
     semantics.dispose();
   });
 
-  testWidgets('parent settings button opens the injected settings page', (
+  testWidgets('gear button opens the injected character settings page', (
     tester,
   ) async {
     await pumpPage(tester);
 
-    await tester.tap(find.byKey(const Key('parent_settings_button')));
+    await tester.tap(
+      find.byKey(const Key('character_settings_labrador_captain')),
+    );
     await tester.pumpAndSettle();
 
-    expect(find.text('家长页面:未选择'), findsOneWidget);
+    expect(find.text('角色页面:labrador_captain'), findsOneWidget);
   });
 
   testWidgets('storage warnings stay hidden from the child screen', (
@@ -438,20 +448,20 @@ void main() {
     expect(find.text('拉布拉多队长'), findsOneWidget);
   });
 
-  testWidgets('empty catalog sends a parent to settings', (tester) async {
+  testWidgets('empty catalog opens the new character editor', (tester) async {
     await pumpPage(
       tester,
       bundled: FakeBundledRepository(characters: const []),
     );
 
     expect(find.text('还没有可以邀请的伙伴'), findsOneWidget);
-    final addButton = find.byKey(const Key('empty_parent_settings_button'));
+    final addButton = find.byKey(const Key('empty_create_character_button'));
     expect(addButton, findsOneWidget);
 
     await tester.tap(addButton);
     await tester.pumpAndSettle();
 
-    expect(find.text('家长页面:未选择'), findsOneWidget);
+    expect(find.byType(CharacterEditorPage), findsOneWidget);
   });
 
   testWidgets('fits a 360 by 640 child screen', (tester) async {

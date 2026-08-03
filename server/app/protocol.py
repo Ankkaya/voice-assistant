@@ -26,8 +26,11 @@ class CustomCharacterSpec(Event):
     trait_ids: list[str] = Field(alias="traitIds", min_length=1, max_length=3)
     interest_ids: list[str] = Field(alias="interestIds", max_length=3)
     description: str = Field(default="", max_length=200)
+    prompt_profile: str = Field(default="", alias="promptProfile", max_length=2000)
 
-    @field_validator("display_name", "greeting", "description", mode="before")
+    @field_validator(
+        "display_name", "greeting", "description", "prompt_profile", mode="before"
+    )
     @classmethod
     def trim_free_text(cls, value: object) -> object:
         return value.strip() if isinstance(value, str) else value

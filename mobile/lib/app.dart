@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'pages/character_page.dart';
-import 'pages/parent_settings_page.dart';
+import 'pages/character_settings_page.dart';
 
 class VoiceCallApp extends StatelessWidget {
   const VoiceCallApp({super.key});
@@ -44,8 +44,8 @@ class VoiceCallApp extends StatelessWidget {
         ),
       ),
       home: CharacterPage(
-        parentSettingsBuilder: (_, initialCharacterId) =>
-            ParentSettingsPage(initialCharacterId: initialCharacterId),
+        characterSettingsBuilder: (_, characterId) =>
+            CharacterSettingsPage(characterId: characterId),
       ),
     );
   }

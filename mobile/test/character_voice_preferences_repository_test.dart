@@ -294,7 +294,9 @@ void main() {
         .list()
         .where((entity) => entity is File)
         .toList();
-    expect(privateFiles.map((file) => file.path), [original.referencePath]);
+    expect(privateFiles.map((file) => file.path.replaceAll('\\', '/')), [
+      original.referencePath!.replaceAll('\\', '/'),
+    ]);
   });
 
   group('clone validation', () {

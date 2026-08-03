@@ -21,11 +21,12 @@ final customRecord = <String, Object?>{
     'description': '喜欢用有趣的小实验解释问题',
   },
   'greeting': '你好呀，我是星星船长！',
+  'promptProfile': '用有趣的科学实验启发孩子。',
   'defaultVoice': {'mode': 'preset', 'voice': '白桦'},
 };
 
 void main() {
-  final root = Directory('/data/app-support');
+  final root = Directory('${Directory.current.path}/test-app-support');
 
   test('custom character round trips relative storage and runtime paths', () {
     final character = Character.fromCustomJson(customRecord, root: root);
@@ -37,8 +38,12 @@ void main() {
     expect(restored.profile!.traitIds, ['brave', 'patient']);
     expect(restored.defaultVoice.presetVoice, '白桦');
     expect(restored.avatar.kind, AvatarKind.localFile);
-    expect(restored.avatar.value, startsWith(root.path));
+    expect(
+      restored.avatar.value.replaceAll('\\', '/'),
+      startsWith(root.path.replaceAll('\\', '/')),
+    );
     expect(restored.displaySubtitle, '喜欢科学的探险伙伴');
+    expect(restored.promptProfile, '用有趣的科学实验启发孩子。');
   });
 
   test('custom session start includes a safe structured snapshot', () {
@@ -56,6 +61,10 @@ void main() {
     expect(event['voiceConfig'], {'mode': 'preset', 'voice': '白桦'});
     expect((event['customCharacter'] as Map).containsKey('avatar'), isFalse);
     expect((event['customCharacter'] as Map).containsKey('subtitle'), isFalse);
+    expect(
+      event['customCharacter'],
+      containsPair('promptProfile', '用有趣的科学实验启发孩子。'),
+    );
   });
 
   test('bundled session remains backward compatible', () {

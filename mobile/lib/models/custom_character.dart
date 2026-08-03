@@ -124,6 +124,7 @@ class CustomCharacterDraft {
     required this.profile,
     required this.greeting,
     required this.defaultVoice,
+    this.promptProfile = '',
   });
 
   final String name;
@@ -133,6 +134,7 @@ class CustomCharacterDraft {
   final CustomCharacterProfile profile;
   final String greeting;
   final VoiceSelection defaultVoice;
+  final String promptProfile;
 
   List<CharacterFieldError> validate() {
     final errors = <CharacterFieldError>[];
@@ -155,6 +157,7 @@ class CustomCharacterDraft {
     }
     limit('greeting', '开场白', greeting, 120);
     limit('description', '补充描述', description, 200);
+    limit('promptProfile', '角色内置提示词', promptProfile.trim(), 2000);
     if (profile.identityId.trim().isEmpty) {
       errors.add(const CharacterFieldError('identityId', '请选择角色身份'));
     }

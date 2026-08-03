@@ -60,6 +60,7 @@ class SessionCharacterResolver:
             spec.display_name,
             spec.greeting,
             spec.description,
+            spec.prompt_profile,
         )
         prompt_profile = self._build_prompt_profile(spec)
         tts, reference_id = self._resolve_tts(event.voice_config, default=None)
@@ -92,6 +93,7 @@ class SessionCharacterResolver:
                 "displayName": spec.display_name,
                 "greeting": spec.greeting,
                 "description": spec.description,
+                "promptProfile": spec.prompt_profile,
             },
             ensure_ascii=False,
         ).replace("【", "[").replace("】", "]")
