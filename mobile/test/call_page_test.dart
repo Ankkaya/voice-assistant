@@ -13,6 +13,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class PageTestSocket implements VoiceSocketClient {
+  PageTestSocket({this.lifecycleEvents, this.closeError});
+
+  final List<String>? lifecycleEvents;
+  final Object? closeError;
   final eventController = StreamController<VoiceEvent>.broadcast();
   final audioController = StreamController<Uint8List>.broadcast();
   @override
@@ -26,7 +30,10 @@ class PageTestSocket implements VoiceSocketClient {
   @override
   void sendEvent(Map<String, Object> event) {}
   @override
-  Future<void> close() async {}
+  Future<void> close() async {
+    lifecycleEvents?.add('controller hangup');
+    if (closeError case final error?) throw error;
+  }
 }
 
 const character = Character(
@@ -56,6 +63,62 @@ const customCharacter = Character(
   ),
   greeting: '你好呀，我是星星船长！',
 );
+
+Future<Completer<CallPageResult?>> openCallRoute(
+  WidgetTester tester, {
+  required CallController controller,
+  required bool incomingCall,
+  required Future<void> Function() cleanup,
+  required Future<void> Function() playHangupTone,
+  bool autoConnect = false,
+  Character callCharacter = character,
+  List<String>? routeEvents,
+}) async {
+  final result = Completer<CallPageResult?>();
+  await tester.pumpWidget(
+    MaterialApp(
+      home: Builder(
+        builder: (context) => FilledButton(
+          key: const Key('open_call'),
+          onPressed: () async {
+            final routeResult = await Navigator.of(context)
+                .push<CallPageResult>(
+                  MaterialPageRoute<CallPageResult>(
+                    builder: (_) => CallPage(
+                      character: callCharacter,
+                      controller: controller,
+                      autoConnect: autoConnect,
+                      incomingCall: incomingCall,
+                      audioCleanupOverride: cleanup,
+                      hangupTonePlaybackOverride: playHangupTone,
+                    ),
+                  ),
+                );
+            routeEvents?.add('pop');
+            result.complete(routeResult);
+          },
+          child: const Text('打开通话'),
+        ),
+      ),
+    ),
+  );
+  await tester.tap(find.byKey(const Key('open_call')));
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 350));
+  return result;
+}
+
+Future<void> allowEndCallWork(WidgetTester tester) async {
+  await tester.runAsync(
+    () => Future<void>.delayed(const Duration(milliseconds: 10)),
+  );
+  await tester.pump();
+}
+
+Future<void> finishCallRoutePop(WidgetTester tester) async {
+  await allowEndCallWork(tester);
+  await tester.pump(const Duration(milliseconds: 350));
+}
 
 void main() {
   setUp(() {
@@ -148,6 +211,259 @@ void main() {
     controller.dispose();
   });
 
+  testWidgets('active hangup cleans up, plays one tone, then returns', (
+    tester,
+  ) async {
+    final events = <String>[];
+    final controller = CallController(
+      character: character,
+      socket: PageTestSocket(lifecycleEvents: events),
+    );
+    addTearDown(controller.dispose);
+    var plays = 0;
+    final result = await openCallRoute(
+      tester,
+      controller: controller,
+      incomingCall: false,
+      cleanup: () async => events.add('cleanup'),
+      playHangupTone: () async {
+        plays++;
+        events.add('tone');
+      },
+      routeEvents: events,
+    );
+
+    await tester.tap(find.byKey(const Key('hangup_button')));
+    await finishCallRoutePop(tester);
+
+    expect(events, ['controller hangup', 'cleanup', 'tone', 'pop']);
+    expect(plays, 1);
+    expect(await result.future, CallPageResult.ended);
+  });
+
+  testWidgets('active hangup waits for tone playback before returning', (
+    tester,
+  ) async {
+    final controller = CallController(
+      character: character,
+      socket: PageTestSocket(),
+    );
+    addTearDown(controller.dispose);
+    final playback = Completer<void>();
+    final result = await openCallRoute(
+      tester,
+      controller: controller,
+      incomingCall: false,
+      cleanup: () async {},
+      playHangupTone: () => playback.future,
+    );
+
+    await tester.tap(find.byKey(const Key('hangup_button')));
+    await allowEndCallWork(tester);
+    expect(result.isCompleted, isFalse);
+
+    playback.complete();
+    await finishCallRoutePop(tester);
+    expect(await result.future, CallPageResult.ended);
+  });
+
+  testWidgets('repeated active hangup taps play only one tone', (tester) async {
+    final controller = CallController(
+      character: character,
+      socket: PageTestSocket(),
+    );
+    addTearDown(controller.dispose);
+    final playback = Completer<void>();
+    var plays = 0;
+    final result = await openCallRoute(
+      tester,
+      controller: controller,
+      incomingCall: false,
+      cleanup: () async {},
+      playHangupTone: () {
+        plays++;
+        return playback.future;
+      },
+    );
+
+    await tester.tap(find.byKey(const Key('hangup_button')));
+    await allowEndCallWork(tester);
+    await tester.tap(find.byKey(const Key('hangup_button')));
+    await tester.pump();
+    expect(plays, 1);
+    expect(result.isCompleted, isFalse);
+
+    playback.complete();
+    await finishCallRoutePop(tester);
+    expect(await result.future, CallPageResult.ended);
+  });
+
+  testWidgets('tone failure still returns from the call', (tester) async {
+    final controller = CallController(
+      character: character,
+      socket: PageTestSocket(),
+    );
+    addTearDown(controller.dispose);
+    final result = await openCallRoute(
+      tester,
+      controller: controller,
+      incomingCall: false,
+      cleanup: () async {},
+      playHangupTone: () => Future<void>.error(StateError('audio unavailable')),
+    );
+
+    await tester.tap(find.byKey(const Key('hangup_button')));
+    await finishCallRoutePop(tester);
+
+    expect(await result.future, CallPageResult.ended);
+  });
+
+  testWidgets('cleanup failure still plays tone and returns', (tester) async {
+    final controller = CallController(
+      character: character,
+      socket: PageTestSocket(),
+    );
+    addTearDown(controller.dispose);
+    var plays = 0;
+    final result = await openCallRoute(
+      tester,
+      controller: controller,
+      incomingCall: false,
+      cleanup: () => Future<void>.error(StateError('cleanup failed')),
+      playHangupTone: () async => plays++,
+    );
+
+    await tester.tap(find.byKey(const Key('hangup_button')));
+    await finishCallRoutePop(tester);
+
+    expect(plays, 1);
+    expect(await result.future, CallPageResult.ended);
+  });
+
+  testWidgets('controller hangup failure still cleans up, plays, and returns', (
+    tester,
+  ) async {
+    final events = <String>[];
+    final controller = CallController(
+      character: character,
+      socket: PageTestSocket(
+        lifecycleEvents: events,
+        closeError: StateError('socket close failed'),
+      ),
+    );
+    addTearDown(controller.dispose);
+    final result = await openCallRoute(
+      tester,
+      controller: controller,
+      incomingCall: false,
+      cleanup: () async => events.add('cleanup'),
+      playHangupTone: () async => events.add('tone'),
+      routeEvents: events,
+    );
+
+    await tester.tap(find.byKey(const Key('hangup_button')));
+    await finishCallRoutePop(tester);
+
+    expect(events, ['controller hangup', 'cleanup', 'tone', 'pop']);
+    expect(await result.future, CallPageResult.ended);
+  });
+
+  testWidgets('declining an incoming call does not play hangup tone', (
+    tester,
+  ) async {
+    final controller = CallController(
+      character: character,
+      socket: PageTestSocket(),
+    );
+    addTearDown(controller.dispose);
+    var plays = 0;
+    final result = await openCallRoute(
+      tester,
+      controller: controller,
+      incomingCall: true,
+      cleanup: () async {},
+      playHangupTone: () async => plays++,
+    );
+
+    await tester.tap(find.byKey(const Key('decline_call_button')));
+    await finishCallRoutePop(tester);
+
+    expect(plays, 0);
+    expect(await result.future, CallPageResult.ended);
+  });
+
+  testWidgets('system back from an active call stays silent', (tester) async {
+    final controller = CallController(
+      character: character,
+      socket: PageTestSocket(),
+    );
+    addTearDown(controller.dispose);
+    var plays = 0;
+    final result = await openCallRoute(
+      tester,
+      controller: controller,
+      incomingCall: false,
+      cleanup: () async {},
+      playHangupTone: () async => plays++,
+    );
+
+    await tester.binding.handlePopRoute();
+    await finishCallRoutePop(tester);
+
+    expect(plays, 0);
+    expect(await result.future, CallPageResult.ended);
+  });
+
+  testWidgets('paused lifecycle termination stays silent', (tester) async {
+    final controller = CallController(
+      character: character,
+      socket: PageTestSocket(),
+    );
+    addTearDown(controller.dispose);
+    var plays = 0;
+    final result = await openCallRoute(
+      tester,
+      controller: controller,
+      incomingCall: false,
+      cleanup: () async {},
+      playHangupTone: () async => plays++,
+    );
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await finishCallRoutePop(tester);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+
+    expect(plays, 0);
+    expect(await result.future, CallPageResult.ended);
+  });
+
+  testWidgets('microphone denial closes without hangup tone', (tester) async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+          const MethodChannel('com.llfbandit.record/messages'),
+          (call) async => call.method == 'hasPermission' ? false : null,
+        );
+    final controller = CallController(
+      character: character,
+      socket: PageTestSocket(),
+    );
+    addTearDown(controller.dispose);
+    var plays = 0;
+    final result = await openCallRoute(
+      tester,
+      controller: controller,
+      incomingCall: false,
+      autoConnect: true,
+      cleanup: () async {},
+      playHangupTone: () async => plays++,
+    );
+
+    await finishCallRoutePop(tester);
+
+    expect(plays, 0);
+    expect(await result.future, CallPageResult.ended);
+  });
+
   testWidgets('custom configuration error offers edit action', (tester) async {
     final controller = CallController(
       character: customCharacter,
@@ -163,6 +479,7 @@ void main() {
     );
     final result = Completer<CallPageResult?>();
     var audioCleanedUp = false;
+    var hangupTonePlays = 0;
     await tester.pumpWidget(
       MaterialApp(
         home: Builder(
@@ -180,6 +497,9 @@ void main() {
                       audioCleanupOverride: () {
                         audioCleanedUp = true;
                         return SynchronousFuture<void>(null);
+                      },
+                      hangupTonePlaybackOverride: () async {
+                        hangupTonePlays++;
                       },
                     ),
                   ),
@@ -204,8 +524,40 @@ void main() {
     });
     await tester.pump(const Duration(milliseconds: 300));
     expect(audioCleanedUp, isTrue);
+    expect(hangupTonePlays, 0);
     expect(result.isCompleted, isTrue);
     expect(await result.future, CallPageResult.editCharacter);
     controller.dispose();
+  });
+
+  testWidgets('configuration-error back action stays silent', (tester) async {
+    final controller = CallController(
+      character: customCharacter,
+      socket: PageTestSocket(),
+    );
+    addTearDown(controller.dispose);
+    controller.onEvent(
+      const TurnErrorEvent(
+        stage: 'session',
+        code: 'UNSAFE_CHARACTER_CONFIG',
+        recoverable: false,
+        message: '角色设定需要修改后才能通话。',
+      ),
+    );
+    var plays = 0;
+    final result = await openCallRoute(
+      tester,
+      controller: controller,
+      incomingCall: false,
+      cleanup: () async {},
+      playHangupTone: () async => plays++,
+      callCharacter: customCharacter,
+    );
+
+    await tester.tap(find.byKey(const Key('back_to_characters_after_error')));
+    await finishCallRoutePop(tester);
+
+    expect(plays, 0);
+    expect(await result.future, CallPageResult.ended);
   });
 }

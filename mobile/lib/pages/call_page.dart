@@ -7,6 +7,7 @@ import 'package:uuid/uuid.dart';
 
 import '../audio/audio_capture.dart';
 import '../audio/audio_player.dart';
+import '../audio/hangup_tone_player.dart';
 import '../audio/pcm_vad.dart';
 import '../audio/ringtone_player.dart';
 import '../controllers/call_controller.dart';
@@ -30,6 +31,7 @@ class CallPage extends StatefulWidget {
     this.incomingCall = true,
     this.voiceSelection = const VoiceSelection(mode: VoiceMode.preset),
     this.audioCleanupOverride,
+    this.hangupTonePlaybackOverride,
     super.key,
   });
 
@@ -40,6 +42,8 @@ class CallPage extends StatefulWidget {
   final VoiceSelection voiceSelection;
   @visibleForTesting
   final Future<void> Function()? audioCleanupOverride;
+  @visibleForTesting
+  final Future<void> Function()? hangupTonePlaybackOverride;
 
   @override
   State<CallPage> createState() => _CallPageState();
@@ -52,6 +56,7 @@ class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
   late final PcmVad _vad;
   late final PcmAudioPlayer _player;
   late final RingtonePlayer _ringtone;
+  HangupTonePlayer? _hangupTone;
   late CallViewState _viewState;
   void Function()? _removeStateListener;
   StreamSubscription<Uint8List>? _captureSubscription;
@@ -75,6 +80,9 @@ class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
     _vad = PcmVad();
     _player = PcmAudioPlayer();
     _ringtone = RingtonePlayer();
+    if (widget.hangupTonePlaybackOverride == null) {
+      _hangupTone = HangupTonePlayer();
+    }
     _accepted = !widget.incomingCall;
     _viewState = _controller.viewState;
     _removeStateListener = _controller.addListener((state) {
@@ -189,15 +197,40 @@ class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
     _vad.reset();
   }
 
-  Future<void> _endCall({CallPageResult result = CallPageResult.ended}) async {
+  Future<void> _ignoreFailure(Future<void> Function() operation) async {
+    try {
+      await operation();
+    } on Object {
+      // Ending a call must not be blocked by an unavailable audio resource.
+    }
+  }
+
+  Future<void> _endCall({
+    CallPageResult result = CallPageResult.ended,
+    bool playHangupTone = false,
+  }) async {
     if (_ending) return;
     _ending = true;
-    await _audioSubscription?.cancel();
+
+    final audioSubscription = _audioSubscription;
     _audioSubscription = null;
-    await _eventSubscription?.cancel();
+    final eventSubscription = _eventSubscription;
     _eventSubscription = null;
-    await _controller.hangUp();
-    await (widget.audioCleanupOverride?.call() ?? _disposeAudioResources());
+    await _ignoreFailure(() async {
+      await audioSubscription?.cancel();
+    });
+    await _ignoreFailure(() async {
+      await eventSubscription?.cancel();
+    });
+    await _ignoreFailure(_controller.hangUp);
+    await _ignoreFailure(
+      widget.audioCleanupOverride?.call ?? _disposeAudioResources,
+    );
+    if (playHangupTone) {
+      await _ignoreFailure(
+        widget.hangupTonePlaybackOverride?.call ?? _hangupTone!.play,
+      );
+    }
     if (mounted) Navigator.of(context).pop(result);
   }
 
@@ -231,6 +264,7 @@ class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
     unawaited(_audioSubscription?.cancel());
     unawaited(_eventSubscription?.cancel());
     if (!_resourcesDisposed) unawaited(_disposeAudioResources());
+    unawaited(_hangupTone?.dispose());
     if (_ownsController) _controller.dispose();
     super.dispose();
   }
@@ -368,7 +402,9 @@ class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
                                         key: const ValueKey(
                                           'active_call_actions',
                                         ),
-                                        onPressed: () => unawaited(_endCall()),
+                                        onPressed: () => unawaited(
+                                          _endCall(playHangupTone: true),
+                                        ),
                                       )
                               : IncomingCallActions(
                                   key: const ValueKey('incoming_call_actions'),
