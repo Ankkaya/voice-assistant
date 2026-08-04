@@ -6,6 +6,7 @@ from pydantic import ValidationError
 
 from app.protocol import (
     AssistantAudioStart,
+    CharacterSuggestionRequest,
     InputAudioStart,
     SessionStart,
     TurnError,
@@ -103,3 +104,28 @@ def test_turn_error_contains_only_stable_fields():
         )
     )
     assert set(body) == {"type", "stage", "code", "recoverable", "message"}
+
+
+def test_character_suggestion_request_accepts_bounded_context():
+    request = CharacterSuggestionRequest.model_validate(
+        {
+            "targetField": "greeting",
+            "formContext": {
+                "name": "星星船长",
+                "traits": ["勇敢", "耐心"],
+            },
+        }
+    )
+
+    assert request.target_field == "greeting"
+    assert request.form_context["name"] == "星星船长"
+
+
+def test_character_suggestion_request_rejects_unknown_context_field():
+    with pytest.raises(ValidationError):
+        CharacterSuggestionRequest.model_validate(
+            {
+                "targetField": "name",
+                "formContext": {"systemPrompt": "不应该出现"},
+            }
+        )

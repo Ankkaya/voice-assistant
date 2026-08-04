@@ -5,6 +5,9 @@ import '../controllers/character_catalog_controller.dart';
 import '../models/character.dart';
 import '../models/character_options.dart';
 import '../models/voice_selection.dart';
+import '../services/character_suggestion_service.dart';
+import '../theme/app_colors.dart';
+import '../widgets/character_avatar_image.dart';
 import '../widgets/character_avatar_picker.dart';
 import '../widgets/character_profile_fields.dart';
 import '../widgets/voice_selector.dart';
@@ -15,6 +18,8 @@ class CharacterEditorPage extends ConsumerStatefulWidget {
     this.avatarPicker,
     this.options,
     this.onSave,
+    this.onDelete,
+    this.suggestionService,
     super.key,
   });
 
@@ -22,6 +27,8 @@ class CharacterEditorPage extends ConsumerStatefulWidget {
   final AvatarPicker? avatarPicker;
   final CharacterOptions? options;
   final Future<Character> Function(CustomCharacterDraft draft)? onSave;
+  final Future<void> Function(Character character)? onDelete;
+  final CharacterSuggestionService? suggestionService;
 
   @override
   ConsumerState<CharacterEditorPage> createState() =>
@@ -31,6 +38,13 @@ class CharacterEditorPage extends ConsumerStatefulWidget {
 class _CharacterEditorPageState extends ConsumerState<CharacterEditorPage> {
   final _formKey = GlobalKey<FormState>();
   final _voiceKey = GlobalKey<VoiceSelectorState>();
+  final _scrollController = ScrollController();
+  final _basicSectionKey = GlobalKey();
+  final _profileSectionKey = GlobalKey();
+  final _otherSectionKey = GlobalKey();
+  final _voiceSectionKey = GlobalKey();
+  late final CharacterSuggestionService _suggestionService;
+  late final bool _ownsSuggestionService;
   late final TextEditingController _nameController;
   late final TextEditingController _subtitleController;
   late final TextEditingController _greetingController;
@@ -46,15 +60,22 @@ class _CharacterEditorPageState extends ConsumerState<CharacterEditorPage> {
   bool _greetingEdited = false;
   bool _settingGreeting = false;
   bool _saving = false;
-  int _selectedTab = 0;
+  bool _deleting = false;
+  CharacterSuggestionField? _suggestingField;
+  String _activeSection = '基本信息';
   String? _identityError;
   String? _traitsError;
 
   bool get _isEditing => widget.character != null;
+  bool get _isBuiltIn => widget.character?.isCustom == false;
 
   @override
   void initState() {
     super.initState();
+    _ownsSuggestionService = widget.suggestionService == null;
+    _suggestionService =
+        widget.suggestionService ?? CharacterSuggestionService();
+    _scrollController.addListener(_updateActiveSection);
     final character = widget.character;
     _nameController = TextEditingController(text: character?.name ?? '')
       ..addListener(_updateDefaultGreeting);
@@ -82,6 +103,7 @@ class _CharacterEditorPageState extends ConsumerState<CharacterEditorPage> {
     _voiceSelection =
         character?.defaultVoice ?? const VoiceSelection(mode: VoiceMode.preset);
     _greetingEdited = character != null;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _updateActiveSection());
   }
 
   @override
@@ -93,6 +115,9 @@ class _CharacterEditorPageState extends ConsumerState<CharacterEditorPage> {
     _greetingController.dispose();
     _descriptionController.dispose();
     _promptController.dispose();
+    _scrollController.removeListener(_updateActiveSection);
+    _scrollController.dispose();
+    if (_ownsSuggestionService) _suggestionService.close();
     super.dispose();
   }
 
@@ -123,23 +148,36 @@ class _CharacterEditorPageState extends ConsumerState<CharacterEditorPage> {
 
   Future<void> _save(CharacterOptions options) async {
     FocusScope.of(context).unfocus();
+    final voiceValid = _voiceKey.currentState?.validate() ?? false;
+    if (_isBuiltIn) {
+      if (!voiceValid) return;
+      final selectedVoice = _voiceKey.currentState!.value;
+      setState(() => _saving = true);
+      try {
+        await ref
+            .read(charactersProvider.notifier)
+            .saveVoice(widget.character!.id, selectedVoice);
+        if (mounted) Navigator.of(context).pop(widget.character);
+      } on Object {
+        if (!mounted) return;
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('音色设置保存失败，请重试')));
+      }
+      return;
+    }
+
     final formValid = _formKey.currentState?.validate() ?? false;
     final identityValid = (_identityId ?? '').isNotEmpty;
     final traitsValid = _traitIds.isNotEmpty;
-    final voiceValid =
-        !_isEditing || (_voiceKey.currentState?.validate() ?? false);
     setState(() {
       _identityError = identityValid ? null : '请选择角色身份';
       _traitsError = traitsValid ? null : '至少选择一个性格';
     });
     if (!formValid || !identityValid || !traitsValid || !voiceValid) return;
 
-    final selectedVoice = _isEditing
-        ? _voiceKey.currentState!.value
-        : VoiceSelection(
-            mode: VoiceMode.preset,
-            presetVoice: options.presetVoices.first.id,
-          );
+    final selectedVoice = _voiceKey.currentState!.value;
     final draft = CustomCharacterDraft(
       name: _nameController.text.trim(),
       subtitle: _subtitleController.text.trim(),
@@ -153,7 +191,7 @@ class _CharacterEditorPageState extends ConsumerState<CharacterEditorPage> {
       ),
       greeting: _greetingController.text.trim(),
       defaultVoice: selectedVoice,
-      promptProfile: _isEditing ? _promptController.text.trim() : '',
+      promptProfile: _promptController.text.trim(),
     );
     setState(() => _saving = true);
     try {
@@ -190,7 +228,7 @@ class _CharacterEditorPageState extends ConsumerState<CharacterEditorPage> {
     final options = suppliedOptions ?? catalogState?.options;
     if (options == null) {
       return Scaffold(
-        appBar: AppBar(title: Text(_isEditing ? '角色编辑' : '新建角色')),
+        appBar: AppBar(title: Text(_pageTitle)),
         body: catalog?.hasError == true
             ? const Center(child: Text('角色选项加载失败'))
             : const Center(child: CircularProgressIndicator()),
@@ -208,9 +246,10 @@ class _CharacterEditorPageState extends ConsumerState<CharacterEditorPage> {
                 widget.character!.defaultVoice;
       _voiceInitialized = true;
     }
-    if (!_isEditing && options.presetVoices.isEmpty) {
+    if (options.presetVoices.isEmpty &&
+        _voiceSelection.mode == VoiceMode.preset) {
       return Scaffold(
-        appBar: AppBar(title: const Text('新建角色')),
+        appBar: AppBar(title: Text(_pageTitle)),
         body: const Center(
           child: Padding(
             padding: EdgeInsets.all(24),
@@ -228,23 +267,31 @@ class _CharacterEditorPageState extends ConsumerState<CharacterEditorPage> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: Text(_isEditing ? '角色编辑' : '新建角色')),
-      bottomNavigationBar: _isEditing
-          ? SafeArea(
-              minimum: const EdgeInsets.fromLTRB(20, 10, 20, 16),
-              child: _saveButton(options, editMode: true),
-            )
-          : null,
+      appBar: AppBar(title: Text(_pageTitle)),
+      bottomNavigationBar: SafeArea(
+        minimum: const EdgeInsets.fromLTRB(20, 10, 20, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _saveButton(options),
+            if (_isEditing && !_isBuiltIn) ...[
+              const SizedBox(height: 8),
+              _deleteButton(),
+            ],
+          ],
+        ),
+      ),
       body: SafeArea(
         child: Form(
           key: _formKey,
           child: SingleChildScrollView(
-            padding: EdgeInsets.fromLTRB(20, 16, 20, _isEditing ? 28 : 32),
+            controller: _scrollController,
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: _isEditing
-                  ? _editFields(options)
-                  : _createFields(options),
+              children: _isBuiltIn
+                  ? _builtInFields(options)
+                  : _customFields(options),
             ),
           ),
         ),
@@ -252,191 +299,214 @@ class _CharacterEditorPageState extends ConsumerState<CharacterEditorPage> {
     );
   }
 
-  List<Widget> _editFields(CharacterOptions options) => [
-    _sectionTitle('角色基础信息'),
-    Card(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(24),
-        side: const BorderSide(color: Color(0xFFE7E9F0)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
+  String get _pageTitle {
+    if (!_isBuiltIn) return _activeSection;
+    return '${widget.character!.name}设置';
+  }
+
+  void _updateActiveSection() {
+    if (!mounted || _isBuiltIn) return;
+    if (_scrollController.hasClients &&
+        _scrollController.position.pixels >=
+            _scrollController.position.maxScrollExtent - 1) {
+      if (_activeSection != '音色设置') {
+        setState(() => _activeSection = '音色设置');
+      }
+      return;
+    }
+    final threshold = MediaQuery.sizeOf(context).height * 0.36;
+    var nextSection = '基本信息';
+    final sections = <(String, GlobalKey)>[
+      ('基本信息', _basicSectionKey),
+      ('角色设定', _profileSectionKey),
+      ('其他信息', _otherSectionKey),
+      ('音色设置', _voiceSectionKey),
+    ];
+    for (final (label, key) in sections) {
+      final renderObject = key.currentContext?.findRenderObject();
+      if (renderObject is! RenderBox || !renderObject.hasSize) continue;
+      if (renderObject.localToGlobal(Offset.zero).dy <= threshold) {
+        nextSection = label;
+      }
+    }
+    if (nextSection != _activeSection) {
+      setState(() => _activeSection = nextSection);
+    }
+  }
+
+  List<Widget> _builtInFields(CharacterOptions options) => [
+    _sectionCard([
+      Row(
+        children: [
+          Container(
+            width: 64,
+            height: 64,
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: widget.character!.themeColor.withValues(alpha: 0.12),
+              shape: BoxShape.circle,
+            ),
+            child: ClipOval(
+              child: CharacterAvatarImage(
+                avatar: widget.character!.avatar,
+                fallbackColor: widget.character!.themeColor,
+              ),
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const _MyCharacterBadge(),
-                const Spacer(),
                 Text(
-                  '${_nameController.text.runes.length}/20',
-                  style: const TextStyle(
-                    color: Color(0xFF777C8D),
-                    fontSize: 12,
-                  ),
+                  widget.character!.name,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  widget.character!.displaySubtitle,
+                  style: const TextStyle(color: AppColors.textSecondary),
                 ),
               ],
             ),
-            const SizedBox(height: 14),
-            CharacterAvatarPicker(
-              initialAvatar: _avatar,
-              initialColorValue: _themeColorValue,
-              picker: widget.avatarPicker,
-              enabled: !_saving,
-              onChanged: (avatar, colorValue) {
-                _avatar = avatar;
-                _themeColorValue = colorValue;
-              },
-            ),
-            const SizedBox(height: 18),
-            _nameField(),
-            const SizedBox(height: 12),
-            _subtitleField(label: '角色简介'),
-            const SizedBox(height: 18),
-            CharacterProfileFields(
-              options: options,
-              identityId: _identityId,
-              traitIds: _traitIds,
-              interestIds: _interestIds,
-              identityError: _identityError,
-              traitsError: _traitsError,
-              enabled: !_saving,
-              onIdentityChanged: (value) => setState(() {
-                _identityId = value;
-                _identityError = null;
-              }),
-              onTraitsChanged: (value) => setState(() {
-                _traitIds = value;
-                _traitsError = null;
-              }),
-              onInterestsChanged: (value) =>
-                  setState(() => _interestIds = value),
-            ),
-            const SizedBox(height: 16),
-            _descriptionField(),
-          ],
-        ),
+          ),
+          const _SystemCharacterBadge(),
+        ],
       ),
-    ),
+      const SizedBox(height: 16),
+      const _EditorHint(
+        icon: Icons.lock_outline_rounded,
+        text: '系统角色的形象与对话设定由应用统一维护，这里只调整当前角色的音色。',
+      ),
+    ]),
     const SizedBox(height: 24),
-    _settingsTabs(),
-    const SizedBox(height: 18),
-    IndexedStack(
-      index: _selectedTab,
-      children: [_voiceSettings(options), _promptSettings()],
-    ),
+    _sectionTitle('音色设置'),
+    _voiceSettings(options),
   ];
 
-  List<Widget> _createFields(CharacterOptions options) => [
-    _sectionTitle('基本信息'),
-    _nameField(),
-    const SizedBox(height: 12),
-    _subtitleField(label: '一句话介绍（可选）'),
-    const SizedBox(height: 8),
-    CharacterAvatarPicker(
-      initialAvatar: _avatar,
-      initialColorValue: _themeColorValue,
-      picker: widget.avatarPicker,
-      enabled: !_saving,
-      onChanged: (avatar, colorValue) {
-        _avatar = avatar;
-        _themeColorValue = colorValue;
-      },
-    ),
-    const SizedBox(height: 28),
-    _sectionTitle('角色设定'),
-    CharacterProfileFields(
-      options: options,
-      identityId: _identityId,
-      traitIds: _traitIds,
-      interestIds: _interestIds,
-      identityError: _identityError,
-      traitsError: _traitsError,
-      enabled: !_saving,
-      onIdentityChanged: (value) => setState(() {
-        _identityId = value;
-        _identityError = null;
-      }),
-      onTraitsChanged: (value) => setState(() {
-        _traitIds = value;
-        _traitsError = null;
-      }),
-      onInterestsChanged: (value) => setState(() => _interestIds = value),
-    ),
-    const SizedBox(height: 16),
-    _descriptionField(),
-    const SizedBox(height: 28),
-    _sectionTitle('开场白'),
-    TextFormField(
-      key: const Key('character_greeting'),
-      controller: _greetingController,
-      enabled: !_saving,
-      minLines: 2,
-      maxLines: 4,
-      maxLength: 120,
-      decoration: const InputDecoration(
-        labelText: '接通电话时说的话',
-        border: OutlineInputBorder(),
+  List<Widget> _customFields(CharacterOptions options) => [
+    _sectionTitle('基本信息', key: _basicSectionKey),
+    _sectionCard([
+      Row(
+        children: [
+          _isEditing ? const _MyCharacterBadge() : const _NewCharacterBadge(),
+          const Spacer(),
+          Text(
+            '${_nameController.text.runes.length}/20',
+            style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+          ),
+        ],
       ),
-      validator: (value) {
-        final text = value?.trim() ?? '';
-        if (text.isEmpty) return '请输入开场白';
-        if (text.runes.length > 120) return '开场白不能超过 120 个字';
-        return null;
-      },
-    ),
-    const SizedBox(height: 28),
-    _saveButton(options, editMode: false),
+      const SizedBox(height: 14),
+      CharacterAvatarPicker(
+        initialAvatar: _avatar,
+        initialColorValue: _themeColorValue,
+        picker: widget.avatarPicker,
+        enabled: !_saving,
+        onChanged: (avatar, colorValue) {
+          _avatar = avatar;
+          _themeColorValue = colorValue;
+        },
+      ),
+      const SizedBox(height: 18),
+      _nameField(),
+      if (!_isEditing) ...[
+        const SizedBox(height: 8),
+        _suggestionButton(
+          field: CharacterSuggestionField.name,
+          controller: _nameController,
+          options: options,
+        ),
+      ],
+      const SizedBox(height: 12),
+      _subtitleField(label: '一句话介绍（可选）'),
+      if (!_isEditing) ...[
+        const SizedBox(height: 8),
+        _suggestionButton(
+          field: CharacterSuggestionField.subtitle,
+          controller: _subtitleController,
+          options: options,
+        ),
+      ],
+    ]),
+    const SizedBox(height: 24),
+    _sectionTitle('角色设定', key: _profileSectionKey),
+    _sectionCard([
+      const _EditorHint(
+        icon: Icons.auto_awesome_rounded,
+        text: '身份、性格、兴趣和补充描述会共同决定角色在问答中的表达方式。',
+      ),
+      const SizedBox(height: 18),
+      CharacterProfileFields(
+        options: options,
+        identityId: _identityId,
+        traitIds: _traitIds,
+        interestIds: _interestIds,
+        identityError: _identityError,
+        traitsError: _traitsError,
+        enabled: !_saving,
+        onIdentityChanged: (value) => setState(() {
+          _identityId = value;
+          _identityError = null;
+        }),
+        onTraitsChanged: (value) => setState(() {
+          _traitIds = value;
+          _traitsError = null;
+        }),
+        onInterestsChanged: (value) => setState(() => _interestIds = value),
+      ),
+      const SizedBox(height: 16),
+      _descriptionField(),
+      if (!_isEditing) ...[
+        const SizedBox(height: 8),
+        _suggestionButton(
+          field: CharacterSuggestionField.description,
+          controller: _descriptionController,
+          options: options,
+        ),
+      ],
+    ]),
+    const SizedBox(height: 24),
+    _sectionTitle('其他信息', key: _otherSectionKey),
+    _sectionCard([
+      _greetingField(),
+      if (!_isEditing) ...[
+        const SizedBox(height: 8),
+        _suggestionButton(
+          field: CharacterSuggestionField.greeting,
+          controller: _greetingController,
+          options: options,
+        ),
+      ],
+      const SizedBox(height: 18),
+      _promptFields(options),
+    ]),
+    const SizedBox(height: 24),
+    _sectionTitle('音色设置', key: _voiceSectionKey),
+    _voiceSettings(options),
   ];
 
-  Widget _settingsTabs() => DecoratedBox(
-    decoration: const BoxDecoration(
-      color: Colors.white,
-      border: Border(bottom: BorderSide(color: Color(0xFFD8DAE2))),
+  Widget _sectionCard(List<Widget> children) => Card(
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(24),
+      side: const BorderSide(color: AppColors.outline),
     ),
-    child: Row(
-      children: [
-        _tabButton(0, '音色设置', const Key('voice_settings_tab')),
-        _tabButton(1, '内置提示词', const Key('prompt_settings_tab')),
-      ],
-    ),
-  );
-
-  Widget _tabButton(int index, String label, Key key) => Expanded(
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        TextButton(
-          key: key,
-          onPressed: _saving
-              ? null
-              : () => setState(() => _selectedTab = index),
-          style: TextButton.styleFrom(
-            foregroundColor: _selectedTab == index
-                ? const Color(0xFF4E72E6)
-                : const Color(0xFF777C8D),
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            minimumSize: const Size.fromHeight(48),
-            shape: const RoundedRectangleBorder(),
-          ),
-          child: Text(
-            label,
-            style: const TextStyle(fontWeight: FontWeight.w800),
-          ),
-        ),
-        AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          height: 3,
-          color: _selectedTab == index
-              ? const Color(0xFF4E72E6)
-              : Colors.transparent,
-        ),
-      ],
+    child: Padding(
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: children,
+      ),
     ),
   );
 
   Widget _voiceSettings(CharacterOptions options) => Card(
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(24),
+      side: const BorderSide(color: AppColors.outline),
+    ),
     child: Padding(
       padding: const EdgeInsets.all(18),
       child: Column(
@@ -444,15 +514,21 @@ class _CharacterEditorPageState extends ConsumerState<CharacterEditorPage> {
         children: [
           Text(
             '当前音色：${_voiceSummary(_voiceSelection)}',
-            style: const TextStyle(color: Color(0xFF777C8D)),
+            style: const TextStyle(color: AppColors.textMuted),
           ),
           const SizedBox(height: 16),
           VoiceSelector(
             key: _voiceKey,
-            keyPrefix: 'editor_${widget.character!.id}',
+            keyPrefix: 'editor_${widget.character?.id ?? 'new'}',
             options: options.presetVoices,
             initialValue: _voiceSelection,
             enabled: !_saving,
+            onSuggestVoiceDescription: !_isEditing
+                ? () => _loadSuggestion(
+                    CharacterSuggestionField.voiceDescription,
+                    options,
+                  )
+                : null,
             onChanged: (value) => setState(() => _voiceSelection = value),
           ),
         ],
@@ -460,65 +536,153 @@ class _CharacterEditorPageState extends ConsumerState<CharacterEditorPage> {
     ),
   );
 
-  Widget _promptSettings() => Card(
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-    child: Padding(
-      padding: const EdgeInsets.all(18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          TextFormField(
-            key: const Key('character_prompt_profile'),
-            controller: _promptController,
-            enabled: !_saving,
-            minLines: 7,
-            maxLines: 12,
-            maxLength: 2000,
-            decoration: const InputDecoration(
-              labelText: '角色内置提示词',
-              hintText: '描述角色的身份、语气和回复方式',
-              alignLabelWithHint: true,
-              border: OutlineInputBorder(),
-            ),
-            validator: (value) => (value ?? '').trim().runes.length > 2000
-                ? '角色内置提示词不能超过 2000 个字'
-                : null,
-          ),
-          const SizedBox(height: 8),
-          const Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(
-                Icons.info_outline_rounded,
-                size: 18,
-                color: Color(0xFF9A6A00),
-              ),
-              SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  '请勿加入个人隐私、危险指令或不适合儿童的内容。',
-                  style: TextStyle(color: Color(0xFF775500), height: 1.4),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            key: const Key('restore_default_prompt'),
-            onPressed: _saving
-                ? null
-                : () => setState(
-                    () => _promptController.text = _defaultPrompt(
-                      widget.character!,
-                    ),
-                  ),
-            icon: const Icon(Icons.restore_rounded),
-            label: const Text('恢复默认'),
-          ),
-        ],
-      ),
+  Widget _greetingField() => TextFormField(
+    key: const Key('character_greeting'),
+    controller: _greetingController,
+    enabled: !_saving,
+    minLines: 2,
+    maxLines: 4,
+    maxLength: 120,
+    decoration: const InputDecoration(
+      labelText: '接通电话时的开场白',
+      hintText: '例如：你好呀，我是星星船长！今天想聊什么呢？',
+      border: OutlineInputBorder(),
+      alignLabelWithHint: true,
     ),
+    validator: (value) {
+      final text = value?.trim() ?? '';
+      if (text.isEmpty) return '请输入开场白';
+      if (text.runes.length > 120) return '开场白不能超过 120 个字';
+      return null;
+    },
   );
+
+  Widget _promptFields(CharacterOptions options) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      TextFormField(
+        key: const Key('character_prompt_profile'),
+        controller: _promptController,
+        enabled: !_saving,
+        minLines: 5,
+        maxLines: 10,
+        maxLength: 2000,
+        decoration: const InputDecoration(
+          labelText: '补充对话设定（可选）',
+          hintText: '例如：喜欢用太空冒险做比喻，遇到困难时先鼓励孩子再一起想办法。',
+          helperText: '会和身份、性格、兴趣一起用于生成角色问答提示词',
+          alignLabelWithHint: true,
+          border: OutlineInputBorder(),
+        ),
+        validator: (value) => (value ?? '').trim().runes.length > 2000
+            ? '补充对话设定不能超过 2000 个字'
+            : null,
+      ),
+      const SizedBox(height: 8),
+      if (!_isEditing) ...[
+        _suggestionButton(
+          field: CharacterSuggestionField.promptProfile,
+          controller: _promptController,
+          options: options,
+        ),
+        const SizedBox(height: 12),
+      ],
+      const _EditorHint(
+        icon: Icons.shield_outlined,
+        text: '请勿加入个人隐私、危险指令或不适合儿童的内容；儿童安全规则始终优先。',
+      ),
+    ],
+  );
+
+  Widget _suggestionButton({
+    required CharacterSuggestionField field,
+    required TextEditingController controller,
+    required CharacterOptions options,
+  }) {
+    final loading = _suggestingField == field;
+    return Align(
+      alignment: Alignment.centerRight,
+      child: OutlinedButton.icon(
+        key: Key('suggest_${field.wireName}'),
+        onPressed: _saving || _suggestingField != null
+            ? null
+            : () => _fillSuggestion(field, controller, options),
+        icon: loading
+            ? const SizedBox.square(
+                dimension: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : const Icon(Icons.auto_awesome_rounded, size: 18),
+        label: Text(loading ? '正在生成…' : 'AI 生成建议'),
+        style: OutlinedButton.styleFrom(
+          minimumSize: const Size(0, 42),
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _fillSuggestion(
+    CharacterSuggestionField field,
+    TextEditingController controller,
+    CharacterOptions options,
+  ) async {
+    final suggestion = await _loadSuggestion(field, options);
+    if (suggestion == null || !mounted) return;
+    controller.value = TextEditingValue(
+      text: suggestion,
+      selection: TextSelection.collapsed(offset: suggestion.length),
+    );
+  }
+
+  Future<String?> _loadSuggestion(
+    CharacterSuggestionField field,
+    CharacterOptions options,
+  ) async {
+    if (_suggestingField != null) return null;
+    setState(() => _suggestingField = field);
+    try {
+      return await _suggestionService.suggest(
+        field: field,
+        formContext: _suggestionContext(options),
+      );
+    } on Object {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('暂时生成不了建议，请稍后再试')));
+      }
+      return null;
+    } finally {
+      if (mounted) setState(() => _suggestingField = null);
+    }
+  }
+
+  Map<String, Object> _suggestionContext(CharacterOptions options) {
+    String optionLabel(List<CharacterOption> values, String? id) =>
+        values
+            .where((option) => option.id == id)
+            .map((option) => option.label)
+            .firstOrNull ??
+        '';
+    List<String> optionLabels(List<CharacterOption> values, Set<String> ids) =>
+        values
+            .where((option) => ids.contains(option.id))
+            .map((option) => option.label)
+            .toList(growable: false);
+
+    return {
+      'name': _nameController.text.trim(),
+      'subtitle': _subtitleController.text.trim(),
+      'identity': optionLabel(options.identities, _identityId),
+      'traits': optionLabels(options.traits, _traitIds),
+      'interests': optionLabels(options.interests, _interestIds),
+      'description': _descriptionController.text.trim(),
+      'greeting': _greetingController.text.trim(),
+      'promptProfile': _promptController.text.trim(),
+      'voiceDescription': _voiceSelection.voiceDescription?.trim() ?? '',
+    };
+  }
 
   Widget _nameField() => TextFormField(
     key: const Key('character_name'),
@@ -566,31 +730,93 @@ class _CharacterEditorPageState extends ConsumerState<CharacterEditorPage> {
         (value ?? '').trim().runes.length > 200 ? '补充描述不能超过 200 个字' : null,
   );
 
-  Widget _saveButton(CharacterOptions options, {required bool editMode}) =>
-      FilledButton.icon(
-        key: const Key('save_character'),
-        onPressed: _saving ? null : () => _save(options),
-        icon: _saving
-            ? const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.white,
-                ),
-              )
-            : const Icon(Icons.save_rounded),
-        label: Text(
-          _saving
-              ? '正在保存…'
-              : editMode
-              ? '保存角色设置'
-              : '保存角色',
-        ),
-        style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
-      );
+  Widget _saveButton(CharacterOptions options) => FilledButton.icon(
+    key: const Key('save_character'),
+    onPressed: _saving || _deleting ? null : () => _save(options),
+    icon: _saving
+        ? const SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: Colors.white,
+            ),
+          )
+        : const Icon(Icons.save_rounded),
+    label: Text(_saving ? '正在保存…' : _saveButtonLabel),
+    style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+  );
 
-  Widget _sectionTitle(String text) => Padding(
+  Widget _deleteButton() => OutlinedButton.icon(
+    key: const Key('delete_character_editor'),
+    onPressed: _saving || _deleting ? null : _confirmDelete,
+    icon: _deleting
+        ? const SizedBox.square(
+            dimension: 18,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          )
+        : const Icon(Icons.delete_outline_rounded),
+    label: Text(_deleting ? '正在删除…' : '删除角色'),
+    style: OutlinedButton.styleFrom(
+      minimumSize: const Size.fromHeight(48),
+      foregroundColor: Theme.of(context).colorScheme.error,
+      side: BorderSide(color: Theme.of(context).colorScheme.error),
+    ),
+  );
+
+  Future<void> _confirmDelete() async {
+    final character = widget.character;
+    if (character == null || !character.isCustom || _saving || _deleting) {
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('删除“${character.name}”？'),
+        content: const Text('角色和保存在本机的头像、参考音频将一并删除，删除后无法恢复。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            key: const Key('confirm_delete_character_editor'),
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            ),
+            child: const Text('确认删除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _deleting = true);
+    try {
+      if (widget.onDelete != null) {
+        await widget.onDelete!(character);
+      } else {
+        await ref.read(charactersProvider.notifier).delete(character.id);
+      }
+      if (mounted) Navigator.of(context).pop();
+    } on Object {
+      if (!mounted) return;
+      setState(() => _deleting = false);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('角色删除失败，请稍后重试')));
+    }
+  }
+
+  String get _saveButtonLabel {
+    if (_isBuiltIn) return '保存音色设置';
+    return _isEditing ? '保存角色设置' : '创建角色';
+  }
+
+  Widget _sectionTitle(String text, {Key? key}) => Padding(
+    key: key,
     padding: const EdgeInsets.only(bottom: 12),
     child: Text(
       text,
@@ -614,15 +840,101 @@ class _MyCharacterBadge extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
     decoration: BoxDecoration(
-      color: const Color(0xFF5B7CFA).withValues(alpha: 0.10),
+      color: AppColors.primary.withValues(alpha: 0.10),
       borderRadius: BorderRadius.circular(999),
     ),
     child: const Text(
       '我的角色',
       style: TextStyle(
-        color: Color(0xFF4E72E6),
+        color: AppColors.primaryDeep,
         fontSize: 12,
         fontWeight: FontWeight.w800,
+      ),
+    ),
+  );
+}
+
+class _NewCharacterBadge extends StatelessWidget {
+  const _NewCharacterBadge();
+
+  @override
+  Widget build(BuildContext context) => const _EditorBadge(
+    label: '新伙伴',
+    foreground: AppColors.secondary,
+    background: Color(0xFFFFEDF3),
+  );
+}
+
+class _SystemCharacterBadge extends StatelessWidget {
+  const _SystemCharacterBadge();
+
+  @override
+  Widget build(BuildContext context) => const _EditorBadge(
+    label: '系统角色',
+    foreground: AppColors.textSecondary,
+    background: AppColors.surfaceTint,
+  );
+}
+
+class _EditorBadge extends StatelessWidget {
+  const _EditorBadge({
+    required this.label,
+    required this.foreground,
+    required this.background,
+  });
+
+  final String label;
+  final Color foreground;
+  final Color background;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+    decoration: BoxDecoration(
+      color: background,
+      borderRadius: BorderRadius.circular(999),
+    ),
+    child: Text(
+      label,
+      style: TextStyle(
+        color: foreground,
+        fontSize: 12,
+        fontWeight: FontWeight.w800,
+      ),
+    ),
+  );
+}
+
+class _EditorHint extends StatelessWidget {
+  const _EditorHint({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+    decoration: BoxDecoration(
+      color: AppColors.surfaceTint,
+      borderRadius: BorderRadius.circular(14),
+    ),
+    child: Padding(
+      padding: const EdgeInsets.all(12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 19, color: AppColors.primaryDeep),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 13,
+                height: 1.45,
+              ),
+            ),
+          ),
+        ],
       ),
     ),
   );

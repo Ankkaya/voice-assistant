@@ -65,31 +65,39 @@ final class FakeHangupToneOutput implements HangupToneOutput {
 }
 
 void main() {
-  test('builds 500ms pcm16 with a descending two-part tone', () {
+  test('builds a loud 760ms pcm16 descending two-part tone', () {
     final bytes = HangupTonePlayer.buildTone();
     final samples = _samples(bytes);
     final samplesPerMillisecond = HangupTonePlayer.sampleRate ~/ 1000;
 
-    expect(bytes, hasLength(HangupTonePlayer.sampleRate));
+    expect(
+      bytes,
+      hasLength(
+        HangupTonePlayer.sampleRate *
+            HangupTonePlayer.duration.inMilliseconds *
+            2 ~/
+            1000,
+      ),
+    );
     expect(samples.any((sample) => sample != 0), isTrue);
     expect(
       samples
-          .sublist(185 * samplesPerMillisecond, 225 * samplesPerMillisecond)
+          .sublist(275 * samplesPerMillisecond, 315 * samplesPerMillisecond)
           .every((sample) => sample == 0),
       isTrue,
     );
 
     final highCrossings = _zeroCrossings(
       samples,
-      20 * samplesPerMillisecond,
-      160 * samplesPerMillisecond,
+      30 * samplesPerMillisecond,
+      230 * samplesPerMillisecond,
     );
     final lowCrossings = _zeroCrossings(
       samples,
-      250 * samplesPerMillisecond,
-      450 * samplesPerMillisecond,
+      370 * samplesPerMillisecond,
+      700 * samplesPerMillisecond,
     );
-    expect(highCrossings / 140, greaterThan(lowCrossings / 200));
+    expect(highCrossings / 200, greaterThan(lowCrossings / 330));
   });
 
   test('concurrent play follows one ordered lifecycle', () async {
@@ -109,9 +117,9 @@ void main() {
 
     expect(events, [
       'start:24000',
-      'feed:24000',
+      'feed:36480',
       'finish',
-      'delay:500',
+      'delay:900',
       'dispose',
     ]);
   });
@@ -164,9 +172,9 @@ void main() {
         expect(secondCompletedBeforePlayback, isFalse);
         expect(events, [
           'start:24000',
-          'feed:24000',
+          'feed:36480',
           'finish',
-          'delay:500',
+          'delay:900',
           'dispose',
         ]);
       },

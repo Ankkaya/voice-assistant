@@ -16,6 +16,11 @@ class FakeAgent:
     async def reply(self, character, history, user_text):
         return "你好呀！"
 
+    async def suggest_character_field(self, target_field, form_context):
+        assert target_field == "subtitle"
+        assert form_context["name"] == "星星船长"
+        return "爱探索太空的勇敢伙伴"
+
 
 class FakeTts:
     async def synthesize(self, text, config):
@@ -55,6 +60,33 @@ def test_character_options_endpoint():
 
     assert response.status_code == 200
     assert response.json()["optionsVersion"] == 1
+
+
+def test_character_suggestion_endpoint():
+    with TestClient(make_test_app()) as client:
+        response = client.post(
+            "/api/character-suggestions",
+            json={
+                "targetField": "subtitle",
+                "formContext": {
+                    "name": "星星船长",
+                    "traits": ["勇敢", "耐心"],
+                },
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {"suggestion": "爱探索太空的勇敢伙伴"}
+
+
+def test_character_suggestion_requires_ready_service():
+    with TestClient(make_test_app(ready=False)) as client:
+        response = client.post(
+            "/api/character-suggestions",
+            json={"targetField": "name", "formContext": {}},
+        )
+
+    assert response.status_code == 503
 
 
 def test_websocket_rejects_binary_before_audio_start():

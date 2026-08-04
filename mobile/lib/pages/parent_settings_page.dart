@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../controllers/character_catalog_controller.dart';
 import '../models/character.dart';
 import '../models/voice_selection.dart';
+import '../theme/app_colors.dart';
 import '../widgets/character_avatar_image.dart';
 import '../widgets/voice_selector.dart';
 import 'character_editor_page.dart';
@@ -237,7 +238,7 @@ class _ParentSettingsPageState extends ConsumerState<ParentSettingsPage> {
       color: Colors.white,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(24),
-        side: const BorderSide(color: Color(0xFFD8DAE2)),
+        side: const BorderSide(color: AppColors.outline),
       ),
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -280,7 +281,7 @@ class _ParentSettingsPageState extends ConsumerState<ParentSettingsPage> {
                         _voiceSummary(voice),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: Color(0xFF777C8D)),
+                        style: const TextStyle(color: AppColors.textMuted),
                       ),
                     ],
                   ),
@@ -337,7 +338,7 @@ class _ParentSettingsPageState extends ConsumerState<ParentSettingsPage> {
       color: Colors.white,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(24),
-        side: const BorderSide(color: Color(0xFFD8DAE2)),
+        side: const BorderSide(color: AppColors.outline),
       ),
       child: Padding(
         padding: const EdgeInsets.all(20),

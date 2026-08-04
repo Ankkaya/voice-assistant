@@ -13,8 +13,55 @@ from pydantic import (
 from .models import TtsMode
 
 
+CharacterSuggestionField = Literal[
+    "name",
+    "subtitle",
+    "description",
+    "greeting",
+    "promptProfile",
+    "voiceDescription",
+]
+
+
 class Event(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+
+class CharacterSuggestionRequest(Event):
+    target_field: CharacterSuggestionField = Field(alias="targetField")
+    form_context: dict[str, str | list[str]] = Field(alias="formContext")
+
+    @model_validator(mode="after")
+    def context_is_small_and_structured(self) -> "CharacterSuggestionRequest":
+        allowed_keys = {
+            "name",
+            "subtitle",
+            "identity",
+            "traits",
+            "interests",
+            "description",
+            "greeting",
+            "promptProfile",
+            "voiceDescription",
+        }
+        if not set(self.form_context).issubset(allowed_keys):
+            raise ValueError("form context contains unsupported fields")
+        total_characters = 0
+        for value in self.form_context.values():
+            values = value if isinstance(value, list) else [value]
+            if len(values) > 3:
+                raise ValueError("form context list is too long")
+            for item in values:
+                if len(item) > 2000:
+                    raise ValueError("form context value is too long")
+                total_characters += len(item)
+        if total_characters > 5000:
+            raise ValueError("form context is too large")
+        return self
+
+
+class CharacterSuggestionResponse(Event):
+    suggestion: str
 
 
 class CustomCharacterSpec(Event):

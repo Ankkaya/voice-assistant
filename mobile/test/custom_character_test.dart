@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:child_voice_call/models/character.dart';
 import 'package:child_voice_call/models/voice_selection.dart';
 import 'package:child_voice_call/protocol/voice_event.dart';
+import 'package:child_voice_call/repositories/bundled_character_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 final customRecord = <String, Object?>{
@@ -26,6 +27,7 @@ final customRecord = <String, Object?>{
 };
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   final root = Directory('${Directory.current.path}/test-app-support');
 
   test('custom character round trips relative storage and runtime paths', () {
@@ -73,6 +75,21 @@ void main() {
       'characterId': 'ryder',
     });
   });
+
+  test(
+    'bundled characters expose complete prompt-relevant configuration',
+    () async {
+      final characters = await BundledCharacterRepository().load();
+
+      for (final character in characters) {
+        expect(character.profile, isNotNull);
+        expect(character.profile!.identityId, isNotEmpty);
+        expect(character.profile!.traitIds, isNotEmpty);
+        expect(character.greeting, isNotEmpty);
+        expect(character.promptProfile, isNotEmpty);
+      }
+    },
+  );
 
   test('rejects local paths outside app support storage', () {
     final record = Map<String, Object?>.from(customRecord);

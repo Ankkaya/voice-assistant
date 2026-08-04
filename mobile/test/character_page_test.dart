@@ -13,6 +13,7 @@ import 'package:child_voice_call/repositories/character_options_repository.dart'
 import 'package:child_voice_call/repositories/character_voice_preferences_repository.dart';
 import 'package:child_voice_call/repositories/custom_character_repository.dart';
 import 'package:child_voice_call/services/character_asset_store.dart';
+import 'package:child_voice_call/services/app_update_service.dart';
 import 'package:child_voice_call/services/voice_reference_uploader.dart';
 import 'package:child_voice_call/widgets/character_card.dart';
 import 'package:child_voice_call/widgets/voice_selector.dart';
@@ -161,6 +162,7 @@ class FakeVoicePreferencesRepository
     : super(root: Directory('/unused'));
 
   final Map<String, VoiceSelection> preferences;
+  final List<(String, VoiceSelection)> saved = [];
 
   @override
   Future<VoicePreferencesLoadResult> load() async => VoicePreferencesLoadResult(
@@ -168,6 +170,15 @@ class FakeVoicePreferencesRepository
     warnings: const {},
     invalidCharacterIds: const {},
   );
+
+  @override
+  Future<VoiceSelection> save(
+    String characterId,
+    VoiceSelection selection,
+  ) async {
+    saved.add((characterId, selection));
+    return selection;
+  }
 
   @override
   Future<void> prune(Set<String> validCharacterIds) async {}
@@ -187,8 +198,70 @@ class DelayedVoiceReferenceUploader extends VoiceReferenceUploader {
   }
 }
 
-Widget _settingsPage(BuildContext context, String characterId) =>
-    Scaffold(body: Center(child: Text('角色页面:$characterId')));
+GitHubRelease fakeRelease({String versionName = '0.1.0'}) {
+  final tag = 'v$versionName';
+  return GitHubRelease(
+    tagName: tag,
+    versionName: versionName,
+    publishedAt: DateTime.utc(2026, 8, 4),
+    releaseNotes: '- 增加版本更新\n- 修复通话问题',
+    apkSizeBytes: 48 * 1024 * 1024,
+    apkDownloadUrl: Uri.parse(
+      'https://github.com/Ankkaya/voice-assistant/releases/download/'
+      '$tag/child-voice-$tag.apk',
+    ),
+    releasePageUrl: Uri.parse(
+      'https://github.com/Ankkaya/voice-assistant/releases/tag/$tag',
+    ),
+  );
+}
+
+AppUpdateResult fakeUpdateResult({String versionName = '0.1.0'}) =>
+    AppUpdateResult(
+      currentVersion: const AppVersion(versionName: '0.1.0', versionCode: 1),
+      release: fakeRelease(versionName: versionName),
+    );
+
+class FakeAppUpdateService implements AppUpdateService {
+  FakeAppUpdateService({
+    AppUpdateResult? result,
+    this.error,
+    this.checkCompleter,
+    this.launchResult = true,
+  }) : result = result ?? fakeUpdateResult();
+
+  final AppUpdateResult result;
+  final Object? error;
+  final Completer<AppUpdateResult>? checkCompleter;
+  final bool launchResult;
+  int checkCount = 0;
+  int launchCount = 0;
+  GitHubRelease? launchedRelease;
+
+  @override
+  Future<AppVersion> currentVersion() async => result.currentVersion;
+
+  @override
+  Future<AppUpdateResult> check() async {
+    checkCount += 1;
+    final injectedError = error;
+    if (injectedError != null) throw injectedError;
+    return checkCompleter?.future ?? result;
+  }
+
+  @override
+  Future<bool> openDownload(GitHubRelease release) async {
+    launchCount += 1;
+    launchedRelease = release;
+    return launchResult;
+  }
+
+  @override
+  void close() {}
+}
+
+Widget _settingsPage(BuildContext context, Character character) =>
+    Scaffold(body: Center(child: Text('角色页面:${character.id}')));
 
 Future<ProviderContainer> pumpPage(
   WidgetTester tester, {
@@ -199,6 +272,8 @@ Future<ProviderContainer> pumpPage(
   Future<bool> Function(String path)? referenceExists,
   bool waitForCatalog = true,
   double textScale = 1,
+  Widget Function(BuildContext, Character)? characterSettingsBuilder,
+  AppUpdateService? appUpdateService,
 }) async {
   final dependencies = CharacterCatalogDependencies(
     bundled: bundled ?? FakeBundledRepository(),
@@ -221,9 +296,10 @@ Future<ProviderContainer> pumpPage(
           child: child!,
         ),
         home: CharacterPage(
-          characterSettingsBuilder: _settingsPage,
+          characterSettingsBuilder: characterSettingsBuilder ?? _settingsPage,
           voiceReferenceUploader: uploader,
           referenceExists: referenceExists,
+          appUpdateService: appUpdateService ?? FakeAppUpdateService(),
         ),
       ),
     ),
@@ -239,6 +315,110 @@ Future<ProviderContainer> pumpPage(
 }
 
 void main() {
+  testWidgets('shows the app version and checks once after startup', (
+    tester,
+  ) async {
+    final updates = FakeAppUpdateService();
+    final semantics = tester.ensureSemantics();
+
+    await pumpPage(tester, appUpdateService: updates);
+    await tester.pumpAndSettle();
+
+    expect(updates.checkCount, 1);
+    expect(find.text('版本 0.1.0 (1)'), findsOneWidget);
+    expect(find.bySemanticsLabel('当前版本 0.1.0，点击检查更新'), findsOneWidget);
+    semantics.dispose();
+  });
+
+  testWidgets('startup check shows a dialog only when an update exists', (
+    tester,
+  ) async {
+    final updates = FakeAppUpdateService(
+      result: fakeUpdateResult(versionName: '0.2.0'),
+    );
+
+    await pumpPage(tester, appUpdateService: updates);
+    await tester.pumpAndSettle();
+
+    expect(find.text('发现新版本 0.2.0'), findsOneWidget);
+    expect(find.text('当前版本：0.1.0 (1)'), findsOneWidget);
+    expect(find.text('最新版本：0.2.0'), findsOneWidget);
+    expect(find.text('安装包：48.0 MB'), findsOneWidget);
+    expect(find.byKey(const Key('download_app_update')), findsOneWidget);
+  });
+
+  testWidgets('manual check reports that the app is up to date', (
+    tester,
+  ) async {
+    final updates = FakeAppUpdateService();
+    await pumpPage(tester, appUpdateService: updates);
+    await tester.pumpAndSettle();
+
+    final versionButton = find.byKey(const Key('app_version_button'));
+    await tester.ensureVisible(versionButton);
+    await tester.tap(versionButton);
+    await tester.pumpAndSettle();
+
+    expect(updates.checkCount, 2);
+    expect(find.text('当前已是最新版本'), findsOneWidget);
+    expect(find.byType(AlertDialog), findsNothing);
+  });
+
+  testWidgets('automatic failures stay silent and manual failures are shown', (
+    tester,
+  ) async {
+    final updates = FakeAppUpdateService(
+      error: const AppUpdateException(AppUpdateFailure.rateLimited),
+    );
+    await pumpPage(tester, appUpdateService: updates);
+    await tester.pumpAndSettle();
+
+    expect(find.text('GitHub 请求频繁，请稍后重试'), findsNothing);
+
+    final versionButton = find.byKey(const Key('app_version_button'));
+    await tester.ensureVisible(versionButton);
+    await tester.tap(versionButton);
+    await tester.pumpAndSettle();
+
+    expect(updates.checkCount, 2);
+    expect(find.text('GitHub 请求频繁，请稍后重试'), findsOneWidget);
+  });
+
+  testWidgets('download action opens the release APK and closes the dialog', (
+    tester,
+  ) async {
+    final updates = FakeAppUpdateService(
+      result: fakeUpdateResult(versionName: '0.2.0'),
+    );
+    await pumpPage(tester, appUpdateService: updates);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('download_app_update')));
+    await tester.pumpAndSettle();
+
+    expect(updates.launchCount, 1);
+    expect(updates.launchedRelease?.versionName, '0.2.0');
+    expect(find.byType(AlertDialog), findsNothing);
+  });
+
+  testWidgets('startup check and repeated taps do not overlap', (tester) async {
+    final blocker = Completer<AppUpdateResult>();
+    final updates = FakeAppUpdateService(checkCompleter: blocker);
+    await pumpPage(tester, appUpdateService: updates);
+    await tester.pump();
+
+    expect(updates.checkCount, 1);
+    expect(find.text('正在检查更新…'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('app_version_button')));
+    await tester.pump();
+    expect(updates.checkCount, 1);
+
+    blocker.complete(fakeUpdateResult());
+    await tester.pumpAndSettle();
+    expect(find.text('版本 0.1.0 (1)'), findsOneWidget);
+  });
+
   testWidgets('shows the child invitation contract for every character', (
     tester,
   ) async {
@@ -399,6 +579,34 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('角色页面:labrador_captain'), findsOneWidget);
+  });
+
+  testWidgets('gear opens only the selected built-in character voice form', (
+    tester,
+  ) async {
+    final voices = FakeVoicePreferencesRepository();
+    await pumpPage(
+      tester,
+      voices: voices,
+      characterSettingsBuilder: (_, character) =>
+          CharacterEditorPage(character: character),
+    );
+
+    await tester.tap(find.byKey(const Key('character_settings_ryder')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(CharacterEditorPage), findsOneWidget);
+    expect(find.text('莱德设置'), findsOneWidget);
+    expect(find.text('系统角色'), findsOneWidget);
+    expect(find.byType(VoiceSelector), findsOneWidget);
+    expect(find.byKey(const Key('character_name')), findsNothing);
+    expect(find.byKey(const Key('character_greeting')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('save_character')));
+    await tester.pumpAndSettle();
+
+    expect(voices.saved, hasLength(1));
+    expect(voices.saved.single.$1, 'ryder');
   });
 
   testWidgets('storage warnings stay hidden from the child screen', (

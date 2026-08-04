@@ -12,7 +12,13 @@ from .agent import LangChainAgent, build_chat_model
 from .character_options import CharacterOptionsRegistry
 from .characters import CharacterRegistry
 from .config import get_settings
-from .protocol import ServerEvent, TurnError, serialize_server_event
+from .protocol import (
+    CharacterSuggestionRequest,
+    CharacterSuggestionResponse,
+    ServerEvent,
+    TurnError,
+    serialize_server_event,
+)
 from .providers.asr import XiaomiAsrProvider
 from .providers.tts import XiaomiTtsProvider
 from .safety import SafetyGuard
@@ -110,6 +116,28 @@ def create_app(injected: AppDependencies | None = None) -> FastAPI:
     async def character_options() -> dict[str, object]:
         dependencies: AppDependencies = app.state.dependencies
         return dependencies.options.public_payload()
+
+    @app.post(
+        "/api/character-suggestions",
+        response_model=CharacterSuggestionResponse,
+    )
+    async def character_suggestion(
+        request: CharacterSuggestionRequest,
+    ) -> CharacterSuggestionResponse:
+        dependencies: AppDependencies = app.state.dependencies
+        if not dependencies.ready or dependencies.agent is None:
+            raise HTTPException(503, "Suggestion service is not ready")
+        try:
+            suggestion = await dependencies.agent.suggest_character_field(
+                request.target_field,
+                request.form_context,
+            )
+        except ValueError as exc:
+            raise HTTPException(400, "Character context is not supported") from exc
+        except Exception as exc:
+            logger.exception("character_suggestion_failed field=%s", request.target_field)
+            raise HTTPException(502, "Suggestion generation failed") from exc
+        return CharacterSuggestionResponse(suggestion=suggestion)
 
     @app.post("/api/voice-references", status_code=201)
     async def upload_voice_reference(file: UploadFile = File(...)):

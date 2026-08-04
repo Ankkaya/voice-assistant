@@ -65,6 +65,10 @@ class Character {
       json,
       'defaultVoiceDescription',
     );
+    final profileJson = json['profile'];
+    if (profileJson is! Map) {
+      throw const FormatException('Bundled character profile is invalid');
+    }
     final presetVoice = (json['defaultPresetVoice'] as String?) ?? '';
     return Character(
       id: _requiredString(json, 'id'),
@@ -73,6 +77,11 @@ class Character {
       avatar: CharacterAvatarRef.asset(_requiredString(json, 'avatar')),
       defaultVoiceDescription: defaultVoiceDescription,
       themeColor: _color(json['themeColor']),
+      profile: CustomCharacterProfile.fromJson(
+        profileJson.cast<String, Object?>(),
+      ),
+      greeting: _requiredString(json, 'greeting'),
+      promptProfile: _requiredString(json, 'promptProfile'),
       defaultVoice: VoiceSelection(
         mode: VoiceMode.preset,
         presetVoice: presetVoice,

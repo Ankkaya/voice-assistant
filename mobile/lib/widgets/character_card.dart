@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/character.dart';
+import '../theme/app_colors.dart';
 import 'character_avatar_image.dart';
 
 class CharacterCard extends StatelessWidget {
@@ -20,7 +21,7 @@ class CharacterCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final themeColor = character.themeColor;
-    const actionColor = Color(0xFF3D4660);
+    const actionColor = AppColors.primaryDeep;
     return Semantics(
       button: true,
       enabled: !busy && onInvite != null,
@@ -78,7 +79,7 @@ class CharacterCard extends StatelessWidget {
                                   overflow: TextOverflow.ellipsis,
                                   style: Theme.of(context).textTheme.titleLarge
                                       ?.copyWith(
-                                        color: const Color(0xFF252A3A),
+                                        color: AppColors.textPrimary,
                                         fontWeight: FontWeight.w800,
                                       ),
                                 ),
@@ -93,7 +94,7 @@ class CharacterCard extends StatelessWidget {
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
-                              color: Color(0xFF606575),
+                              color: AppColors.textSecondary,
                               fontSize: 14,
                               height: 1.3,
                             ),
@@ -162,7 +163,7 @@ class CharacterCard extends StatelessWidget {
                     height: 48,
                   ),
                   icon: const Icon(Icons.settings_rounded, size: 23),
-                  color: const Color(0xFF777C8D),
+                  color: AppColors.textMuted,
                 ),
               ),
             ),
@@ -186,14 +187,14 @@ class _CharacterSourceBadge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: custom
-            ? const Color(0xFF5B7CFA).withValues(alpha: 0.10)
-            : const Color(0xFF777C8D).withValues(alpha: 0.10),
+            ? AppColors.primary.withValues(alpha: 0.10)
+            : AppColors.textMuted.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
         custom ? '我的角色' : '系统内置',
         style: TextStyle(
-          color: custom ? const Color(0xFF4E72E6) : const Color(0xFF606575),
+          color: custom ? AppColors.primaryDeep : AppColors.textSecondary,
           fontSize: 11,
           fontWeight: FontWeight.w700,
         ),

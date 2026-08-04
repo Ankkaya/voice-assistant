@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../models/character_options.dart';
 import '../models/voice_selection.dart';
 import '../services/character_asset_store.dart';
+import '../theme/app_colors.dart';
 
 class PickedVoiceReference {
   const PickedVoiceReference({
@@ -52,6 +53,7 @@ class VoiceSelector extends StatefulWidget {
     this.picker = const FilePickerVoiceReferencePicker(),
     this.enabled = true,
     this.keyPrefix,
+    this.onSuggestVoiceDescription,
     super.key,
   });
 
@@ -61,6 +63,7 @@ class VoiceSelector extends StatefulWidget {
   final VoiceReferencePicker picker;
   final bool enabled;
   final String? keyPrefix;
+  final Future<String?> Function()? onSuggestVoiceDescription;
 
   @override
   State<VoiceSelector> createState() => VoiceSelectorState();
@@ -73,6 +76,7 @@ class VoiceSelectorState extends State<VoiceSelector> {
   String? _referencePath;
   String? _referenceName;
   bool _cloneAuthorized = false;
+  bool _suggestingVoiceDescription = false;
   String? _errorText;
 
   VoiceSelection get value => VoiceSelection(
@@ -168,6 +172,24 @@ class VoiceSelectorState extends State<VoiceSelector> {
     widget.onChanged(value);
   }
 
+  Future<void> _suggestVoiceDescription() async {
+    final callback = widget.onSuggestVoiceDescription;
+    if (callback == null || _suggestingVoiceDescription) return;
+    setState(() => _suggestingVoiceDescription = true);
+    try {
+      final suggestion = await callback();
+      if (!mounted || suggestion == null) return;
+      _descriptionController.value = TextEditingValue(
+        text: suggestion,
+        selection: TextSelection.collapsed(offset: suggestion.length),
+      );
+      setState(() => _errorText = null);
+      _emit();
+    } finally {
+      if (mounted) setState(() => _suggestingVoiceDescription = false);
+    }
+  }
+
   Key _key(String value) => ValueKey(
     widget.keyPrefix == null ? value : '${value}_${widget.keyPrefix}',
   );
@@ -237,6 +259,25 @@ class VoiceSelectorState extends State<VoiceSelector> {
               border: OutlineInputBorder(),
             ),
           ),
+          if (widget.onSuggestVoiceDescription != null) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: OutlinedButton.icon(
+                key: _key('suggest_voice_description'),
+                onPressed: widget.enabled && !_suggestingVoiceDescription
+                    ? _suggestVoiceDescription
+                    : null,
+                icon: _suggestingVoiceDescription
+                    ? const SizedBox.square(
+                        dimension: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.auto_awesome_rounded, size: 18),
+                label: Text(_suggestingVoiceDescription ? '正在生成…' : 'AI 生成建议'),
+              ),
+            ),
+          ],
         ],
         if (_mode == VoiceMode.voiceClone) ...[
           const SizedBox(height: 14),
@@ -264,7 +305,7 @@ class VoiceSelectorState extends State<VoiceSelector> {
           ),
           const Text(
             '参考音频仅保存在本机，文件不超过 10 MB。',
-            style: TextStyle(color: Color(0xFF777C8D), fontSize: 12),
+            style: TextStyle(color: AppColors.textMuted, fontSize: 12),
           ),
         ],
         if (_errorText != null) ...[

@@ -42,7 +42,8 @@ final class HangupTonePlayer {
        _delay = delay ?? Future<void>.delayed;
 
   static const sampleRate = 24000;
-  static const duration = Duration(milliseconds: 500);
+  static const duration = Duration(milliseconds: 760);
+  static const playbackTail = Duration(milliseconds: 140);
 
   final HangupToneOutput _output;
   final Future<void> Function(Duration) _delay;
@@ -61,7 +62,7 @@ final class HangupTonePlayer {
       await _output.start(sampleRate);
       await _output.feed(buildTone());
       await _output.finish();
-      await _delay(duration);
+      await _delay(duration + playbackTail);
     } finally {
       await _disposeOutputOnce();
     }
@@ -88,10 +89,10 @@ final class HangupTonePlayer {
 
   @visibleForTesting
   static Uint8List buildTone() {
-    const firstEndMs = 180.0;
-    const secondStartMs = 230.0;
-    const secondEndMs = 480.0;
-    const fadeMs = 12.0;
+    const firstEndMs = 260.0;
+    const secondStartMs = 330.0;
+    const secondEndMs = 730.0;
+    const fadeMs = 18.0;
     final sampleCount = sampleRate * duration.inMilliseconds ~/ 1000;
     final data = ByteData(sampleCount * 2);
 
@@ -117,7 +118,7 @@ final class HangupTonePlayer {
             );
       final seconds = index / sampleRate;
       final sample =
-          (math.sin(2 * math.pi * frequency * seconds) * envelope * 6500)
+          (math.sin(2 * math.pi * frequency * seconds) * envelope * 18000)
               .round()
               .clamp(-32768, 32767);
       data.setInt16(index * 2, sample, Endian.little);

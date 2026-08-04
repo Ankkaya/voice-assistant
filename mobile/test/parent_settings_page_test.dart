@@ -449,7 +449,10 @@ void main() {
     await tester.tap(find.byKey(const Key('edit_character')));
     await tester.pumpAndSettle();
     expect(find.byType(CharacterEditorPage), findsOneWidget);
-    expect(find.text('角色编辑'), findsWidgets);
+    expect(
+      find.descendant(of: find.byType(AppBar), matching: find.text('基本信息')),
+      findsOneWidget,
+    );
 
     await tester.pageBack();
     await tester.pumpAndSettle();
@@ -458,7 +461,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(CharacterEditorPage), findsOneWidget);
-    expect(find.text('新建角色'), findsOneWidget);
+    expect(
+      find.descendant(of: find.byType(AppBar), matching: find.text('基本信息')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('supports a 360 by 640 screen with 1.3 text scaling', (

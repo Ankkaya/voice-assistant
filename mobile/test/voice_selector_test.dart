@@ -17,8 +17,9 @@ class FakeVoicePicker implements VoiceReferencePicker {
 
 Widget voiceSelectorApp(
   FakeVoicePicker picker,
-  GlobalKey<VoiceSelectorState> selectorKey,
-) => MaterialApp(
+  GlobalKey<VoiceSelectorState> selectorKey, {
+  Future<String?> Function()? onSuggestVoiceDescription,
+}) => MaterialApp(
   home: Scaffold(
     body: SingleChildScrollView(
       child: VoiceSelector(
@@ -29,6 +30,7 @@ Widget voiceSelectorApp(
           presetVoice: '白桦',
         ),
         picker: picker,
+        onSuggestVoiceDescription: onSuggestVoiceDescription,
         onChanged: (_) {},
       ),
     ),
@@ -81,5 +83,31 @@ void main() {
     await tester.pump();
 
     expect(find.text('请至少用 8 个字描述希望生成的音色'), findsOneWidget);
+  });
+
+  testWidgets('voice design can fill an AI-generated suggestion', (
+    tester,
+  ) async {
+    final picker = FakeVoicePicker();
+    final selectorKey = GlobalKey<VoiceSelectorState>();
+    await tester.pumpWidget(
+      voiceSelectorApp(
+        picker,
+        selectorKey,
+        onSuggestVoiceDescription: () async => '温暖明亮、活泼自然的少年伙伴声音',
+      ),
+    );
+    await selectMode(tester, VoiceMode.voiceDesign);
+
+    final button = find.byKey(const Key('suggest_voice_description'));
+    await tester.ensureVisible(button);
+    await tester.tap(button);
+    await tester.pump();
+
+    expect(find.text('温暖明亮、活泼自然的少年伙伴声音'), findsOneWidget);
+    expect(
+      selectorKey.currentState!.value.voiceDescription,
+      '温暖明亮、活泼自然的少年伙伴声音',
+    );
   });
 }
