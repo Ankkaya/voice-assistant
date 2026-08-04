@@ -1,0 +1,4 @@
+storeFile=C:/secure/path/childvoice-release.jks
+storePassword=replace-with-store-password
+keyAlias=childvoice
+keyPassword=replace-with-key-password

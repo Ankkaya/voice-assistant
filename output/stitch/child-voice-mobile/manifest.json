@@ -1,0 +1,68 @@
+{
+  "project": {
+    "id": "8797252543152607781",
+    "resource": "projects/8797252543152607781",
+    "title": "儿童 AI 角色电话 · Mobile Experience",
+    "visibility": "PRIVATE"
+  },
+  "designSystem": {
+    "id": "9937948698320844967",
+    "resource": "assets/9937948698320844967",
+    "title": "Child Voice Mobile System",
+    "version": 1
+  },
+  "finalScreens": [
+    {
+      "id": "bc0f9c0896e349ffa0c8c7bbbb1c059a",
+      "title": "角色选择首页",
+      "preview": "01-character-home.png"
+    },
+    {
+      "id": "473548a7e6de4ec19bde1a004856bb45",
+      "title": "角色来电：拉布拉多救援队长",
+      "preview": "07-incoming-call-corrected.png"
+    },
+    {
+      "id": "1769a8b0900d4e149fac9348f0e92d29",
+      "title": "通话中：正在聆听",
+      "preview": "08-call-listening-corrected.png"
+    },
+    {
+      "id": "905c80ade3f24e60a1a8f17d1e13c110",
+      "title": "通话中：角色说话状态"
+    },
+    {
+      "id": "4722624b837e44e8a67a0436b36495a8",
+      "title": "通话中：角色思考状态"
+    },
+    {
+      "id": "85ff06f157f44cb49a8afe0a701a9353",
+      "title": "通话中：重试提示状态"
+    },
+    {
+      "id": "d316752336cd40e3bb9d8b1e7de51b4f",
+      "title": "家长设置：角色音色配置",
+      "preview": "04-parent-voice.png"
+    },
+    {
+      "id": "ed03057a0e724ca9a18cdbf929edc581",
+      "title": "家长设置：音色设计状态"
+    },
+    {
+      "id": "b10fd9cf2ad8416ba53727d1df18fbf1",
+      "title": "家长设置：音色克隆状态",
+      "preview": "05-parent-clone.png"
+    },
+    {
+      "id": "624c3289bfef49a497758b137642968a",
+      "title": "新建角色：表单默认状态",
+      "preview": "06-character-editor.png"
+    }
+  ],
+  "generatedAssets": [
+    {
+      "id": "777dd2a58ef2451092172927e7f85fd1",
+      "title": "拉布拉多救援队长角色图"
+    }
+  ]
+}

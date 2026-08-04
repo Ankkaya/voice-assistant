@@ -1,0 +1,50 @@
+{
+  "runId": "ds-build-20260803-child-voice-call",
+  "figma": {
+    "fileKey": "YjgQNkk03D4G83uSSXkeQv",
+    "fileUrl": "https://www.figma.com/design/YjgQNkk03D4G83uSSXkeQv"
+  },
+  "phase": "phase0",
+  "step": "P0.c-blocked",
+  "entities": {
+    "collections": {},
+    "variables": {},
+    "styles": {},
+    "pages": {},
+    "components": {},
+    "screens": {}
+  },
+  "pendingValidations": [
+    "P0.b:read-only file inventory via use_figma",
+    "P0.c:get_libraries and design-system search",
+    "P0.d:scope lock",
+    "P0.e:code-to-Figma conflict map",
+    "P0.f:gap-analysis approval"
+  ],
+  "validations": [
+    {
+      "id": "P0.b.metadata",
+      "status": "passed",
+      "detail": "New design file contains only Page 1 (0:1)."
+    },
+    {
+      "id": "P0.c.mcp-quota",
+      "status": "blocked",
+      "detail": "Figma Starter plan MCP tool call limit reached immediately after top-level metadata inspection."
+    }
+  ],
+  "completedSteps": ["P0.a", "P0.b.metadata"],
+  "discovery": {
+    "font": "Noto Sans SC per approved design specification; Flutter currently uses Material default font",
+    "baseFrame": "390x844 Android; validate 360x640 and 412x915",
+    "existingFigma": "Blank file; Page 1 only",
+    "codeConnect": "No *.figma.ts, *.figma.tsx, *.figma.js, or *.figma.jsx files",
+    "sourceConflict": "Current Flutter child character cards expose voice controls, while the approved design separates those controls into adult settings.",
+    "scopeAddition": "Current repository includes custom-character create/edit/delete flows that postdate the original Figma specification and must be included."
+  },
+  "blocker": {
+    "type": "figma_mcp_rate_limit",
+    "plan": "Starter",
+    "message": "You've reached the Figma MCP tool call limit on the Starter plan."
+  }
+}

@@ -1,0 +1,49 @@
+name: voice-assistant-production
+
+services:
+  voice-server:
+    image: "${VOICE_SERVER_IMAGE:?Set VOICE_SERVER_IMAGE to a GHCR digest reference}"
+    environment:
+      MIMO_API_KEY_FILE: /run/secrets/mimo_api_key
+      LLM_API_KEY_FILE: /run/secrets/llm_api_key
+      MIMO_BASE_URL: "${MIMO_BASE_URL:-https://token-plan-cn.xiaomimimo.com/v1}"
+      LLM_PROVIDER: "${LLM_PROVIDER:-openai_compatible}"
+      LLM_MODEL: "${LLM_MODEL:-mimo-v2.5}"
+      LLM_BASE_URL: "${LLM_BASE_URL:-https://token-plan-cn.xiaomimimo.com/v1}"
+      VOICE_HOST: "${VOICE_HOST:-0.0.0.0}"
+      VOICE_PORT: "${VOICE_PORT:-8000}"
+      LOG_LEVEL: "${LOG_LEVEL:-INFO}"
+    secrets:
+      - mimo_api_key
+      - llm_api_key
+    ports:
+      - "127.0.0.1:8000:8000"
+    init: true
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 1g
+    stop_grace_period: 30s
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).read()
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+secrets:
+  mimo_api_key:
+    environment: MIMO_API_KEY
+  llm_api_key:
+    environment: LLM_API_KEY
