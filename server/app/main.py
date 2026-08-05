@@ -99,7 +99,7 @@ def create_app(injected: AppDependencies | None = None) -> FastAPI:
             if client is not None:
                 await client.aclose()
 
-    app = FastAPI(title="Child Voice Call", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="Child Voice Call", version="0.0.1", lifespan=lifespan)
 
     @app.get("/health")
     async def health() -> dict[str, str]:
