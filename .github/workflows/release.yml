@@ -256,16 +256,19 @@ jobs:
             exit 1
           }
 
+          normalize_cert() {
+            sed -E 's/^[[:space:]]*(sha-?256[[:space:]]*[:=]|sha256\/)[[:space:]]*//' \
+              | tr -cd '[:xdigit:]' \
+              | tr '[:upper:]' '[:lower:]'
+          }
           actual_cert="$($apksigner verify --print-certs "$apk" \
             | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' \
             | head -n 1 \
-            | tr -d ':[:space:]' \
-            | tr '[:upper:]' '[:lower:]')"
-          expected_cert="$(printf '%s' "$ANDROID_CERT_SHA256" \
-            | tr -d ':[:space:]' \
-            | tr '[:upper:]' '[:lower:]')"
-          if [[ -z "$actual_cert" || "$actual_cert" != "$expected_cert" ]]; then
-            echo "APK signing certificate does not match ANDROID_CERT_SHA256" >&2
+            | normalize_cert)"
+          expected_cert="$(printf '%s' "$ANDROID_CERT_SHA256" | normalize_cert)"
+          if [[ ${#actual_cert} -ne 64 || ${#expected_cert} -ne 64 || "$actual_cert" != "$expected_cert" ]]; then
+            echo "APK signing certificate does not match ANDROID_CERT_SHA256." >&2
+            echo "Actual APK signing certificate SHA-256: $actual_cert" >&2
             exit 1
           fi
 

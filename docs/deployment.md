@@ -42,6 +42,9 @@ git push origin v0.2.0
 | `DEPLOY_SSH_KEY` | `docker_demo.pem` 的完整内容 |
 | `DEPLOY_HOST_KEY` | 经人工核验的服务器 `known_hosts` 完整行，不是单独的指纹 |
 
+`ANDROID_CERT_SHA256` 可以填写纯十六进制、冒号分隔格式，或 `keytool` 输出的
+`SHA256: AA:BB:...` 整行；工作流会统一规范化后再核验 APK 签名。
+
 在 Windows PowerShell 中生成 keystore 的 Base64 文本：
 
 ```powershell
