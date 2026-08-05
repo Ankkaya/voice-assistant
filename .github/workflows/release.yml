@@ -63,7 +63,7 @@ jobs:
         working-directory: server
         run: |
           python -m compileall -q app tests
-          pytest -q
+          python -m pytest -q
 
   mobile-test:
     name: Flutter checks

@@ -203,7 +203,7 @@ GET /api/character-options
 ```bash
 cd server
 python3 -m compileall -q app tests
-pytest -q
+python3 -m pytest -q
 ```
 
 Flutter：

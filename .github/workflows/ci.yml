@@ -38,7 +38,7 @@ jobs:
 
       - name: Run server tests
         working-directory: server
-        run: pytest -q
+        run: python -m pytest -q
 
   mobile:
     name: Flutter checks
