@@ -18,3 +18,4 @@ mobile/android/*.jks
 mobile/android/*.keystore
 deploy/image.env
 deploy/image.previous.env
+dist/

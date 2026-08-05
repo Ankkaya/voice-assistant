@@ -3,7 +3,8 @@ set -Eeuo pipefail
 
 umask 077
 
-readonly expected_image_pattern='^ghcr\.io/ankkaya/voice-assistant-server@sha256:[0-9a-f]{64}$'
+readonly ghcr_image_pattern='^ghcr\.io/ankkaya/voice-assistant-server@sha256:[0-9a-f]{64}$'
+readonly local_image_pattern='^sha256:[0-9a-f]{64}$'
 readonly script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 readonly project_dir="$(dirname -- "$script_dir")"
 readonly compose_file="$script_dir/compose.prod.yml"
@@ -12,7 +13,10 @@ readonly previous_env="$script_dir/image.previous.env"
 readonly project_env="$project_dir/.env"
 
 usage() {
-  echo "Usage: $0 ghcr.io/ankkaya/voice-assistant-server@sha256:<64 hex characters>" >&2
+  echo "Usage: $0 <immutable image reference>" >&2
+  echo "Accepted references:" >&2
+  echo "  ghcr.io/ankkaya/voice-assistant-server@sha256:<64 hex characters>" >&2
+  echo "  sha256:<64 hex local image ID>" >&2
 }
 
 if [[ $# -ne 1 ]]; then
@@ -21,7 +25,7 @@ if [[ $# -ne 1 ]]; then
 fi
 
 readonly image_ref="$1"
-if [[ ! "$image_ref" =~ $expected_image_pattern ]]; then
+if [[ ! "$image_ref" =~ $ghcr_image_pattern && ! "$image_ref" =~ $local_image_pattern ]]; then
   echo "Refusing invalid or mutable image reference: $image_ref" >&2
   usage
   exit 2
@@ -61,6 +65,19 @@ compose() {
     "$@"
 }
 
+ensure_image() {
+  local ref="$1"
+  if docker image inspect "$ref" >/dev/null 2>&1; then
+    return 0
+  fi
+  if [[ "$ref" =~ $ghcr_image_pattern ]]; then
+    compose pull voice-server
+    return
+  fi
+  echo "Required local image is not loaded: $ref" >&2
+  return 1
+}
+
 wait_until_ready() {
   local attempt
   for attempt in $(seq 1 18); do
@@ -89,7 +106,7 @@ rollback() {
 
   echo "Rolling back to $previous_ref" >&2
   write_image_ref "$previous_ref" "$image_env"
-  compose pull voice-server
+  ensure_image "$previous_ref"
   compose up --detach --remove-orphans --wait --wait-timeout 90 voice-server
   wait_until_ready
 }
@@ -101,7 +118,7 @@ fi
 
 write_image_ref "$image_ref" "$image_env"
 
-if ! compose pull voice-server; then
+if ! ensure_image "$image_ref"; then
   rollback "$previous_ref"
   exit 1
 fi

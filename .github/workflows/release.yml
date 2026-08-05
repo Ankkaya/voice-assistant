@@ -1,4 +1,4 @@
-name: Release
+name: Release checks
 
 on:
   push:
@@ -6,25 +6,24 @@ on:
       - "v*.*.*"
 
 concurrency:
-  group: production-release
-  cancel-in-progress: false
+  group: release-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 env:
   FLUTTER_VERSION: 3.44.8
-  IMAGE_NAME: ghcr.io/ankkaya/voice-assistant-server
 
 jobs:
   validate:
     name: Validate release tag
     runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.version.outputs.version }}
     steps:
       - name: Check out source
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Validate semantic version
-        id: version
         shell: bash
         run: |
           set -euo pipefail
@@ -38,7 +37,6 @@ jobs:
             echo "Tag version $version does not match mobile/pubspec.yaml version $declared_version" >&2
             exit 1
           fi
-          echo "version=$version" >> "$GITHUB_OUTPUT"
 
   server-test:
     name: Server tests
@@ -93,290 +91,3 @@ jobs:
           dart format --output=none --set-exit-if-changed lib test
           flutter analyze
           flutter test
-
-  publish-image:
-    name: Publish server image
-    needs: [validate, server-test]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-      attestations: write
-      id-token: write
-    outputs:
-      image-ref: ${{ steps.image.outputs.ref }}
-    steps:
-      - name: Check out source
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
-
-      - name: Log in to GHCR
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Generate image metadata
-        id: metadata
-        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
-        with:
-          images: ${{ env.IMAGE_NAME }}
-          tags: |
-            type=raw,value=${{ github.ref_name }}
-            type=raw,value=sha-${{ github.sha }}
-
-      - name: Build and push image
-        id: build
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
-        with:
-          context: server
-          push: true
-          tags: ${{ steps.metadata.outputs.tags }}
-          labels: ${{ steps.metadata.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Record immutable image reference
-        id: image
-        shell: bash
-        env:
-          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
-        run: echo "ref=${IMAGE_NAME}@${IMAGE_DIGEST}" >> "$GITHUB_OUTPUT"
-
-      - name: Attest server image
-        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4
-        with:
-          subject-name: ${{ env.IMAGE_NAME }}
-          subject-digest: ${{ steps.build.outputs.digest }}
-          push-to-registry: true
-
-  build-android:
-    name: Build signed Android app
-    needs: [validate, mobile-test]
-    runs-on: ubuntu-latest
-    environment: production
-    steps:
-      - name: Check out source
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-
-      - name: Set up Java
-        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
-        with:
-          distribution: temurin
-          java-version: "17"
-
-      - name: Set up Flutter
-        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: stable
-          cache: true
-
-      - name: Validate release configuration
-        shell: bash
-        env:
-          VOICE_SERVER_URL: ${{ vars.VOICE_SERVER_URL }}
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          ANDROID_CERT_SHA256: ${{ secrets.ANDROID_CERT_SHA256 }}
-        run: |
-          set -euo pipefail
-          for name in VOICE_SERVER_URL ANDROID_KEYSTORE_BASE64 ANDROID_KEY_ALIAS ANDROID_STORE_PASSWORD ANDROID_KEY_PASSWORD ANDROID_CERT_SHA256; do
-            if [[ -z "${!name:-}" ]]; then
-              echo "Missing production configuration: $name" >&2
-              exit 1
-            fi
-          done
-          if [[ ! "$VOICE_SERVER_URL" =~ ^wss:// ]]; then
-            echo "VOICE_SERVER_URL must use wss:// for a release build" >&2
-            exit 1
-          fi
-
-      - name: Restore Android signing key
-        shell: bash
-        env:
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-        run: |
-          set -euo pipefail
-          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/childvoice-release.jks"
-          chmod 600 "$RUNNER_TEMP/childvoice-release.jks"
-
-      - name: Build APK and App Bundle
-        working-directory: mobile
-        env:
-          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/childvoice-release.jks
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          VOICE_SERVER_URL: ${{ vars.VOICE_SERVER_URL }}
-          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
-        run: |
-          set -euo pipefail
-          flutter pub get
-          flutter build apk --release \
-            --build-name="$RELEASE_VERSION" \
-            --build-number="$GITHUB_RUN_NUMBER" \
-            --dart-define="VOICE_SERVER_URL=$VOICE_SERVER_URL"
-          flutter build appbundle --release \
-            --build-name="$RELEASE_VERSION" \
-            --build-number="$GITHUB_RUN_NUMBER" \
-            --dart-define="VOICE_SERVER_URL=$VOICE_SERVER_URL"
-
-      - name: Verify APK identity, version, and signer
-        shell: bash
-        env:
-          ANDROID_CERT_SHA256: ${{ secrets.ANDROID_CERT_SHA256 }}
-          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
-        run: |
-          set -euo pipefail
-          apk="mobile/build/app/outputs/flutter-apk/app-release.apk"
-          aapt="$(find "$ANDROID_HOME/build-tools" -type f -name aapt -print | sort -V | tail -n 1)"
-          apksigner="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner -print | sort -V | tail -n 1)"
-          if [[ -z "$aapt" || -z "$apksigner" ]]; then
-            echo "Android SDK validation tools were not found" >&2
-            exit 1
-          fi
-
-          package_line="$($aapt dump badging "$apk" | head -n 1)"
-          [[ "$package_line" == *"name='com.example.childvoice'"* ]] || {
-            echo "Unexpected Android applicationId: $package_line" >&2
-            exit 1
-          }
-          [[ "$package_line" == *"versionName='$RELEASE_VERSION'"* ]] || {
-            echo "Unexpected Android versionName: $package_line" >&2
-            exit 1
-          }
-          [[ "$package_line" == *"versionCode='$GITHUB_RUN_NUMBER'"* ]] || {
-            echo "Unexpected Android versionCode: $package_line" >&2
-            exit 1
-          }
-
-          normalize_cert() {
-            sed -E 's/^[[:space:]]*(sha-?256[[:space:]]*[:=]|sha256\/)[[:space:]]*//' \
-              | tr -cd '[:xdigit:]' \
-              | tr '[:upper:]' '[:lower:]'
-          }
-          actual_cert="$($apksigner verify --print-certs "$apk" \
-            | sed -n 's/^.*certificate SHA-256 digest:[[:space:]]*//p' \
-            | head -n 1 \
-            | normalize_cert)"
-          expected_cert="$(printf '%s' "$ANDROID_CERT_SHA256" | normalize_cert)"
-          if [[ ${#actual_cert} -ne 64 || ${#expected_cert} -ne 64 || "$actual_cert" != "$expected_cert" ]]; then
-            echo "APK signing certificate does not match ANDROID_CERT_SHA256." >&2
-            echo "Actual APK signing certificate SHA-256: $actual_cert" >&2
-            exit 1
-          fi
-
-      - name: Prepare release assets
-        shell: bash
-        env:
-          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
-        run: |
-          set -euo pipefail
-          mkdir -p dist
-          cp mobile/build/app/outputs/flutter-apk/app-release.apk "dist/child-voice-v${RELEASE_VERSION}.apk"
-          cp mobile/build/app/outputs/bundle/release/app-release.aab "dist/child-voice-v${RELEASE_VERSION}.aab"
-          cd dist
-          sha256sum ./* > SHA256SUMS
-
-      - name: Upload Android artifacts
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        with:
-          name: android-release-${{ github.ref_name }}
-          path: dist/
-          if-no-files-found: error
-          retention-days: 14
-
-  deploy:
-    name: Deploy server
-    needs: [publish-image, build-android]
-    runs-on: ubuntu-latest
-    environment: production
-    steps:
-      - name: Check out deployment files
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-
-      - name: Configure SSH
-        shell: bash
-        env:
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          DEPLOY_HOST_KEY: ${{ secrets.DEPLOY_HOST_KEY }}
-        run: |
-          set -euo pipefail
-          if [[ -z "$DEPLOY_SSH_KEY" || -z "$DEPLOY_HOST_KEY" ]]; then
-            echo "DEPLOY_SSH_KEY and DEPLOY_HOST_KEY are required" >&2
-            exit 1
-          fi
-          install -d -m 700 "$HOME/.ssh"
-          printf '%s\n' "$DEPLOY_SSH_KEY" > "$HOME/.ssh/deploy_key"
-          printf '%s\n' "$DEPLOY_HOST_KEY" > "$HOME/.ssh/known_hosts"
-          chmod 600 "$HOME/.ssh/deploy_key" "$HOME/.ssh/known_hosts"
-
-      - name: Upload deployment files
-        shell: bash
-        env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-          DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
-        run: |
-          set -euo pipefail
-          : "${DEPLOY_HOST:?DEPLOY_HOST is required}"
-          : "${DEPLOY_USER:?DEPLOY_USER is required}"
-          DEPLOY_PORT="${DEPLOY_PORT:-22}"
-          SSH_ARGS=(-i "$HOME/.ssh/deploy_key" -p "$DEPLOY_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
-          ssh "${SSH_ARGS[@]}" "$DEPLOY_USER@$DEPLOY_HOST" \
-            "install -d -m 700 /opt/projects/voice-assistant/deploy"
-          scp -i "$HOME/.ssh/deploy_key" -P "$DEPLOY_PORT" \
-            -o BatchMode=yes -o StrictHostKeyChecking=yes \
-            deploy/compose.prod.yml deploy/deploy.sh \
-            "$DEPLOY_USER@$DEPLOY_HOST:/opt/projects/voice-assistant/deploy/"
-
-      - name: Deploy immutable image
-        shell: bash
-        env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-          DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
-          IMAGE_REF: ${{ needs.publish-image.outputs.image-ref }}
-        run: |
-          set -euo pipefail
-          DEPLOY_PORT="${DEPLOY_PORT:-22}"
-          ssh -i "$HOME/.ssh/deploy_key" -p "$DEPLOY_PORT" \
-            -o BatchMode=yes -o StrictHostKeyChecking=yes \
-            "$DEPLOY_USER@$DEPLOY_HOST" \
-            "chmod 700 /opt/projects/voice-assistant/deploy/deploy.sh && /opt/projects/voice-assistant/deploy/deploy.sh '$IMAGE_REF'"
-
-  release:
-    name: Publish GitHub Release
-    needs: [validate, build-android, deploy]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Check out source
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-
-      - name: Download Android artifacts
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
-        with:
-          name: android-release-${{ github.ref_name }}
-          path: dist
-
-      - name: Create GitHub Release
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          release_args=("$GITHUB_REF_NAME" dist/* --generate-notes --verify-tag)
-          if [[ "$GITHUB_REF_NAME" == *-* ]]; then
-            release_args+=(--prerelease --latest=false)
-          else
-            release_args+=(--latest)
-          fi
-          gh release create "${release_args[@]}"

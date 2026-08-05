@@ -1,104 +1,156 @@
-# GHCR、腾讯云与 Android 自动发布
+# 本地正式发布与腾讯云部署
 
-生产发布由 `.github/workflows/release.yml` 完成。推送语义化版本标签后，工作流测试代码、发布不可变服务端镜像、构建签名 Android 包、部署腾讯云，并在健康检查通过后创建 GitHub Release。
+正式版本由开发机完成 Android 签名构建和 Linux 服务镜像构建。GitHub Actions 只运行发布检查；开发机通过 SSH 把不可变镜像传到腾讯云，健康切换成功后再创建 GitHub Release。
 
-## 发布入口
+发布入口为 `scripts/release-local.ps1`。该脚本不会从 GitHub Secrets 下载或恢复任何私钥。
 
-普通 Pull Request 和 `main` 推送只运行 `.github/workflows/ci.yml`，不会接触生产密钥或部署服务器。
+## 流程概览
 
-生产发布必须从已合入 `main` 的提交创建标签：
+1. 推送与 `mobile/pubspec.yaml` 匹配的语义版本标签。
+2. GitHub Actions 并行运行后端测试与 Flutter 检查，不构建或部署生产产物。
+3. 开发机再次运行同等检查，使用固定正式 keystore 构建 APK 和 AAB。
+4. 开发机验证包名、版本号、versionCode 和签名证书。
+5. 开发机为 `linux/amd64` 构建带提交标签的镜像。
+6. 镜像通过 SSH/SCP 传到服务器并由 `docker load` 导入，不经过 GHCR；导入后以服务器实际 image ID 部署。
+7. 服务器使用现有 `.env` 启动新容器；`/health` 和 `/ready` 通过后完成切换，失败则恢复上一镜像。
+8. 开发机创建 GitHub Release 并上传 APK、AAB 和 `SHA256SUMS`。
 
-```bash
-git switch main
-git pull --ff-only origin main
-git tag -a v0.2.0 -m "Release v0.2.0"
-git push origin v0.2.0
-```
+## 开发机前置条件
 
-支持 `v0.2.0` 和 `v0.2.0-rc.1`，其他标签不会触发发布工作流。
+- Windows PowerShell 7。
+- Flutter 3.44.8、Dart 3.12、Java 17 和 Android SDK build-tools。
+- Python 3.11 及 `server/requirements.txt` 中的依赖。
+- Docker Desktop，能够构建 `linux/amd64` 镜像。
+- GitHub CLI `gh`，已登录 `Ankkaya/voice-assistant`。
+- OpenSSH `ssh`、`scp`，并已在 `known_hosts` 中人工核验部署服务器主机密钥。
+- 固定正式 Android keystore 及其离线备份。
 
-## GitHub Environment
+## Android 本地签名
 
-在仓库 Settings → Environments 中创建 `production`，推荐启用 Required reviewers，并只允许 `v*` 标签部署。
-
-配置 Environment variable：
-
-| 名称 | 示例 | 用途 |
-| --- | --- | --- |
-| `VOICE_SERVER_URL` | `wss://voice.ankkaya.top/ws/voice` | 编译进 Android App 的公开 WebSocket 地址 |
-| `DEPLOY_PORT` | `22` | SSH 端口；不设置时使用 22 |
-
-配置 Environment secrets：
-
-| 名称 | 内容 |
-| --- | --- |
-| `ANDROID_KEYSTORE_BASE64` | 正式 `.jks` 文件的 Base64 文本 |
-| `ANDROID_KEY_ALIAS` | Android 签名别名 |
-| `ANDROID_STORE_PASSWORD` | keystore 密码 |
-| `ANDROID_KEY_PASSWORD` | 私钥密码 |
-| `ANDROID_CERT_SHA256` | 正式签名证书的 SHA-256 指纹，用于发布前核验 APK |
-| `DEPLOY_HOST` | `43.139.44.156` |
-| `DEPLOY_USER` | 当前为 `root`；后续建议改为专用部署用户 |
-| `DEPLOY_SSH_KEY` | `docker_demo.pem` 的完整内容 |
-| `DEPLOY_HOST_KEY` | 经人工核验的服务器 `known_hosts` 完整行，不是单独的指纹 |
-
-`ANDROID_CERT_SHA256` 可以填写纯十六进制、冒号分隔格式，或 `keytool` 输出的
-`SHA256: AA:BB:...` 整行；工作流会统一规范化后再核验 APK 签名。
-
-在 Windows PowerShell 中生成 keystore 的 Base64 文本：
+复制示例并填写同一把长期正式密钥：
 
 ```powershell
-[Convert]::ToBase64String(
-  [IO.File]::ReadAllBytes('C:\secure\childvoice-release.jks')
-) | Set-Clipboard
+Copy-Item mobile/android/key.properties.example mobile/android/key.properties
 ```
 
-不要提交 `.jks`、`key.properties`、SSH 私钥或任何密码。原始 Android keystore 必须另做离线备份；丢失后将无法为现有 App 发布可覆盖安装的更新。
+`mobile/android/key.properties` 示例：
+
+```properties
+storeFile=C:/secure/childvoice-release.jks
+storePassword=<store password>
+keyAlias=childvoice
+keyPassword=<key password>
+```
+
+该文件和 `.jks` 已被 Git 忽略，不得提交。首个正式版本发布后不能更换密钥，否则 Android 无法覆盖安装并保留用户本地数据。
+
+使用 `keytool` 查询公开证书指纹：
+
+```powershell
+keytool -list -v -keystore C:\secure\childvoice-release.jks -alias childvoice
+```
+
+脚本会把 APK 的实际签名与 `ANDROID_CERT_SHA256` 比较。指纹可以使用纯十六进制、冒号分隔格式或 `SHA256: AA:BB:...` 整行。
+
+## 本地发布配置
+
+在当前 PowerShell 会话设置：
+
+```powershell
+$env:VOICE_SERVER_URL = 'wss://voice.ankkaya.top/ws/voice'
+$env:ANDROID_CERT_SHA256 = '<正式证书 SHA-256 指纹>'
+$env:DEPLOY_SSH_KEY_PATH = 'C:\secure\docker_demo.pem'
+$env:DEPLOY_HOST = '43.139.44.156'
+$env:DEPLOY_USER = 'root'
+$env:DEPLOY_PORT = '22'
+```
+
+`DEPLOY_USER` 未设置时默认为 `root`；SSH 端口默认为 `22`。推荐后续改为权限受限的专用部署用户。
+
+密钥密码只保存在被忽略的 `key.properties` 中；脚本不会把密码、keystore、SSH 私钥或服务端 `.env` 写入产物和日志。
 
 ## 服务器准备
 
-服务器项目根目录固定为：
+项目目录固定为：
 
 ```text
 /opt/projects/voice-assistant
 ```
 
-现有 `.env` 继续保存在该目录，权限应保持 `600`。工作流只上传 `deploy/compose.prod.yml` 和 `deploy/deploy.sh`，不会读取或上传服务器 `.env`。
-
-如果 GHCR Package 是 Public，服务器不需要登录。如果保持 Private，需要在服务器上使用仅含 `read:packages` 权限的 Token 登录一次：
-
-```bash
-printf '%s' "$GHCR_READ_TOKEN" | docker login ghcr.io --username Ankkaya --password-stdin
-```
-
-完成后从当前 shell 清除 `GHCR_READ_TOKEN`。不要把 Token 写进项目 `.env`。
-
-`deploy/deploy.sh` 只接受以下不可变格式：
+生产环境变量继续保存在 `/opt/projects/voice-assistant/.env`，权限应为 `600`。本地发布只上传：
 
 ```text
-ghcr.io/ankkaya/voice-assistant-server@sha256:<64 位十六进制摘要>
+deploy/compose.prod.yml
+deploy/deploy.sh
+临时 Docker image tar
 ```
 
-脚本会保存当前镜像、拉取新镜像、启动容器并检查 `/health` 和 `/ready`。失败时自动恢复上一个 digest。服务器不会执行 `git pull` 或 `docker build`。
+镜像 tar 导入成功后立即从服务器 `/tmp` 删除。服务端不需要 GitHub Token、GHCR 登录或源代码副本。
 
-## Android 本地签名
+`deploy.sh` 接受两类不可变引用：
 
-GitHub Actions 从 Environment Secrets 读取签名参数。本地仍可在 `mobile/android/key.properties` 中配置同一把正式密钥；示例见 `mobile/android/key.properties.example`。Release 构建不再回退到 debug 签名，缺少任何签名参数都会失败。
+```text
+sha256:<64 位本地 image ID>
+ghcr.io/ankkaya/voice-assistant-server@sha256:<64 位镜像摘要>
+```
+
+前者用于新的本地发布流程；后者仅用于兼容和回滚已有部署。脚本只在本地不存在 GHCR 摘要时尝试拉取网络镜像，本地 image ID 必须预先由 `docker load` 导入。image ID 是内容寻址值，不能像普通 Docker 标签一样被覆盖。
+
+## 创建版本
+
+先更新 `mobile/pubspec.yaml`：
+
+```yaml
+version: 0.0.2+2
+```
+
+`+` 后的 Android versionCode 必须随正式版本单调递增。提交后创建并推送标签：
+
+```powershell
+git tag -a v0.0.2 -m 'Release v0.0.2'
+git push origin feature/voice-call-mvp
+git push origin v0.0.2
+```
+
+等待 GitHub Actions 的 `Release checks` 成功，然后在干净且与远端标签一致的工作区运行：
+
+```powershell
+pwsh -File scripts/release-local.ps1 -Tag v0.0.2
+```
+
+脚本会拒绝以下情况：
+
+- 工作区存在未提交修改。
+- 标签、`pubspec.yaml` 版本或当前提交不一致。
+- 远端没有同一 annotated tag。
+- 同名 GitHub Release 已存在。
+- 缺少本地签名、证书指纹、SSH 配置或服务器 `.env`。
+- APK 包名、版本、versionCode 或签名不符合预期。
+- 服务镜像不是 `linux/amd64`。
+- 新容器健康检查失败。
 
 ## 发布产物
 
-成功发布后，GitHub Release 包含：
+本地产物保存在：
 
 ```text
-child-voice-v0.2.0.apk
-child-voice-v0.2.0.aab
-SHA256SUMS
+dist/v0.0.2/child-voice-v0.0.2.apk
+dist/v0.0.2/child-voice-v0.0.2.aab
+dist/v0.0.2/SHA256SUMS
 ```
 
-对应服务端同时存在版本标签和提交标签，但腾讯云实际部署的是不可变 digest：
+`dist/` 被 Git 忽略。发布完成后，同一批文件会上传到 GitHub Release。
+
+开发机保留便于识别的提交标签：
 
 ```text
-ghcr.io/ankkaya/voice-assistant-server:v0.2.0
-ghcr.io/ankkaya/voice-assistant-server:sha-<完整提交 SHA>
-ghcr.io/ankkaya/voice-assistant-server@sha256:<digest>
+voice-assistant-server:sha-<完整提交 SHA>
 ```
+
+服务器会核对镜像中的提交标签，并使用 `docker load` 后得到的实际内容寻址 ID 部署：
+
+```text
+sha256:<64 位 image ID>
+```
+
+部署脚本在切换前保存上一镜像引用。新容器启动或就绪检查失败时会自动恢复上一镜像；不要通过重新构建同一标签来回滚。

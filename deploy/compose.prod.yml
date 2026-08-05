@@ -2,7 +2,7 @@ name: voice-assistant-production
 
 services:
   voice-server:
-    image: "${VOICE_SERVER_IMAGE:?Set VOICE_SERVER_IMAGE to a GHCR digest reference}"
+    image: "${VOICE_SERVER_IMAGE:?Set VOICE_SERVER_IMAGE to an immutable image reference}"
     environment:
       MIMO_API_KEY_FILE: /run/secrets/mimo_api_key
       LLM_API_KEY_FILE: /run/secrets/llm_api_key
