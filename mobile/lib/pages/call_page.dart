@@ -216,19 +216,27 @@ class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
     _audioSubscription = null;
     final eventSubscription = _eventSubscription;
     _eventSubscription = null;
-    await _ignoreFailure(() async {
-      await audioSubscription?.cancel();
-    });
-    await _ignoreFailure(() async {
-      await eventSubscription?.cancel();
-    });
-    await _ignoreFailure(_controller.hangUp);
-    await _ignoreFailure(
-      widget.audioCleanupOverride?.call ?? _disposeAudioResources,
+    unawaited(
+      _ignoreFailure(() async {
+        await audioSubscription?.cancel();
+      }),
+    );
+    unawaited(
+      _ignoreFailure(() async {
+        await eventSubscription?.cancel();
+      }),
+    );
+    unawaited(_ignoreFailure(_controller.hangUp));
+    unawaited(
+      _ignoreFailure(
+        widget.audioCleanupOverride?.call ?? _disposeAudioResources,
+      ),
     );
     if (playHangupTone) {
-      await _ignoreFailure(
-        widget.hangupTonePlaybackOverride?.call ?? _hangupTone!.play,
+      unawaited(
+        _ignoreFailure(
+          widget.hangupTonePlaybackOverride?.call ?? _hangupTone!.play,
+        ),
       );
     }
     if (mounted) Navigator.of(context).pop(result);

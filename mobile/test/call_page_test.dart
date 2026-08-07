@@ -13,10 +13,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class PageTestSocket implements VoiceSocketClient {
-  PageTestSocket({this.lifecycleEvents, this.closeError});
+  PageTestSocket({this.lifecycleEvents, this.closeError, this.closeWait});
 
   final List<String>? lifecycleEvents;
   final Object? closeError;
+  final Future<void>? closeWait;
   final eventController = StreamController<VoiceEvent>.broadcast();
   final audioController = StreamController<Uint8List>.broadcast();
   @override
@@ -33,6 +34,7 @@ class PageTestSocket implements VoiceSocketClient {
   Future<void> close() async {
     lifecycleEvents?.add('controller hangup');
     if (closeError case final error?) throw error;
+    await closeWait;
   }
 }
 
@@ -211,7 +213,7 @@ void main() {
     controller.dispose();
   });
 
-  testWidgets('active hangup cleans up, plays one tone, then returns', (
+  testWidgets('hangup before connection starts tone, then returns', (
     tester,
   ) async {
     final events = <String>[];
@@ -236,12 +238,15 @@ void main() {
     await tester.tap(find.byKey(const Key('hangup_button')));
     await finishCallRoutePop(tester);
 
-    expect(events, ['controller hangup', 'cleanup', 'tone', 'pop']);
+    expect(
+      events,
+      containsAll(['controller hangup', 'cleanup', 'tone', 'pop']),
+    );
     expect(plays, 1);
     expect(await result.future, CallPageResult.ended);
   });
 
-  testWidgets('active hangup waits for tone playback before returning', (
+  testWidgets('hangup after connection starts tone, then returns', (
     tester,
   ) async {
     final controller = CallController(
@@ -249,22 +254,51 @@ void main() {
       socket: PageTestSocket(),
     );
     addTearDown(controller.dispose);
-    final playback = Completer<void>();
+    controller.onEvent(const AssistantAudioEnd(turnId: 'greeting'));
+    expect(controller.state.phase, CallPhase.listening);
+    var plays = 0;
     final result = await openCallRoute(
       tester,
       controller: controller,
       incomingCall: false,
       cleanup: () async {},
+      playHangupTone: () async => plays++,
+    );
+
+    await tester.tap(find.byKey(const Key('hangup_button')));
+    await finishCallRoutePop(tester);
+
+    expect(plays, 1);
+    expect(await result.future, CallPageResult.ended);
+  });
+
+  testWidgets('active hangup returns without waiting for background cleanup', (
+    tester,
+  ) async {
+    final socketClose = Completer<void>();
+    final controller = CallController(
+      character: character,
+      socket: PageTestSocket(closeWait: socketClose.future),
+    );
+    addTearDown(controller.dispose);
+    final cleanup = Completer<void>();
+    final playback = Completer<void>();
+    final result = await openCallRoute(
+      tester,
+      controller: controller,
+      incomingCall: false,
+      cleanup: () => cleanup.future,
       playHangupTone: () => playback.future,
     );
 
     await tester.tap(find.byKey(const Key('hangup_button')));
-    await allowEndCallWork(tester);
-    expect(result.isCompleted, isFalse);
-
-    playback.complete();
     await finishCallRoutePop(tester);
+
+    expect(result.isCompleted, isTrue);
     expect(await result.future, CallPageResult.ended);
+    socketClose.complete();
+    cleanup.complete();
+    playback.complete();
   });
 
   testWidgets('repeated active hangup taps play only one tone', (tester) async {
@@ -287,14 +321,12 @@ void main() {
     );
 
     await tester.tap(find.byKey(const Key('hangup_button')));
-    await allowEndCallWork(tester);
     await tester.tap(find.byKey(const Key('hangup_button')));
-    await tester.pump();
+    await finishCallRoutePop(tester);
     expect(plays, 1);
-    expect(result.isCompleted, isFalse);
+    expect(result.isCompleted, isTrue);
 
     playback.complete();
-    await finishCallRoutePop(tester);
     expect(await result.future, CallPageResult.ended);
   });
 
@@ -364,7 +396,10 @@ void main() {
     await tester.tap(find.byKey(const Key('hangup_button')));
     await finishCallRoutePop(tester);
 
-    expect(events, ['controller hangup', 'cleanup', 'tone', 'pop']);
+    expect(
+      events,
+      containsAll(['controller hangup', 'cleanup', 'tone', 'pop']),
+    );
     expect(await result.future, CallPageResult.ended);
   });
 
