@@ -4,10 +4,10 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <application
-        android:icon="@mipmap/ic_launcher"
+        android:icon="@drawable/app_icon"
         android:label="嗨呀"
         android:name="${applicationName}"
-        android:roundIcon="@mipmap/ic_launcher">
+        android:roundIcon="@drawable/app_icon">
         <activity
             android:name=".MainActivity"
             android:exported="true"
