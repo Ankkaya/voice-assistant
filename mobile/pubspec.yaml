@@ -1,7 +1,7 @@
 name: child_voice_call
 description: Internal MVP for child-friendly AI character voice calls.
 publish_to: "none"
-version: 0.0.1+1
+version: 0.0.2+2
 
 environment:
   sdk: ">=3.12.0 <4.0.0"
