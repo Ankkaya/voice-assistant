@@ -1,60 +1,24 @@
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:child_voice_call/audio/hangup_tone_player.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-List<int> _samples(Uint8List bytes) {
-  final data = ByteData.sublistView(bytes);
-  return [
-    for (var offset = 0; offset < bytes.length; offset += 2)
-      data.getInt16(offset, Endian.little),
-  ];
-}
-
-int _zeroCrossings(List<int> samples, int start, int end) {
-  var crossings = 0;
-  for (var index = start + 1; index < end; index++) {
-    if ((samples[index - 1] < 0 && samples[index] >= 0) ||
-        (samples[index - 1] > 0 && samples[index] <= 0)) {
-      crossings++;
-    }
-  }
-  return crossings;
-}
-
 final class FakeHangupToneOutput implements HangupToneOutput {
-  FakeHangupToneOutput({
-    required this.events,
-    this.startGate,
-    this.feedGate,
-    this.disposeGate,
-  });
+  FakeHangupToneOutput({required this.events, this.playGate, this.disposeGate});
 
   final List<String> events;
-  final Completer<void>? startGate;
-  final Completer<void>? feedGate;
+  final Completer<void>? playGate;
   final Completer<void>? disposeGate;
-  final startEntered = Completer<void>();
-  final feedEntered = Completer<void>();
+  final playEntered = Completer<void>();
   final disposeEntered = Completer<void>();
 
   @override
-  Future<void> start(int sampleRate) async {
-    events.add('start:$sampleRate');
-    startEntered.complete();
-    await startGate?.future;
+  Future<void> play(Uint8List mp3Bytes) async {
+    events.add('play:${mp3Bytes.length}');
+    playEntered.complete();
+    await playGate?.future;
   }
-
-  @override
-  Future<void> feed(Uint8List bytes) async {
-    events.add('feed:${bytes.length}');
-    feedEntered.complete();
-    await feedGate?.future;
-  }
-
-  @override
-  Future<void> finish() async => events.add('finish');
 
   @override
   Future<void> dispose() async {
@@ -64,122 +28,111 @@ final class FakeHangupToneOutput implements HangupToneOutput {
   }
 }
 
+ByteData _assetData([List<int> bytes = const [1, 2, 3, 4]]) {
+  return ByteData.sublistView(Uint8List.fromList(bytes));
+}
+
 void main() {
-  test('builds a loud 760ms pcm16 descending two-part tone', () {
-    final bytes = HangupTonePlayer.buildTone();
-    final samples = _samples(bytes);
-    final samplesPerMillisecond = HangupTonePlayer.sampleRate ~/ 1000;
+  TestWidgetsFlutterBinding.ensureInitialized();
 
-    expect(
-      bytes,
-      hasLength(
-        HangupTonePlayer.sampleRate *
-            HangupTonePlayer.duration.inMilliseconds *
-            2 ~/
-            1000,
-      ),
-    );
-    expect(samples.any((sample) => sample != 0), isTrue);
-    expect(
-      samples
-          .sublist(275 * samplesPerMillisecond, 315 * samplesPerMillisecond)
-          .every((sample) => sample == 0),
-      isTrue,
+  test('bundles the selected MP3 hangup sound', () async {
+    final data = await rootBundle.load(HangupTonePlayer.assetPath);
+    final bytes = data.buffer.asUint8List(
+      data.offsetInBytes,
+      data.lengthInBytes,
     );
 
-    final highCrossings = _zeroCrossings(
-      samples,
-      30 * samplesPerMillisecond,
-      230 * samplesPerMillisecond,
-    );
-    final lowCrossings = _zeroCrossings(
-      samples,
-      370 * samplesPerMillisecond,
-      700 * samplesPerMillisecond,
-    );
-    expect(highCrossings / 200, greaterThan(lowCrossings / 330));
+    expect(HangupTonePlayer.isMp3File(bytes), isTrue);
+    expect(bytes, hasLength(22477));
   });
 
-  test('concurrent play follows one ordered lifecycle', () async {
-    final events = <String>[];
-    final output = FakeHangupToneOutput(events: events);
-    final player = HangupTonePlayer(
-      output: output,
-      delay: (duration) async => events.add('delay:${duration.inMilliseconds}'),
-    );
+  test(
+    'concurrent play loads the MP3 once and follows one lifecycle',
+    () async {
+      final events = <String>[];
+      var loads = 0;
+      final output = FakeHangupToneOutput(events: events);
+      final player = HangupTonePlayer(
+        output: output,
+        assetLoader: (path) async {
+          loads++;
+          expect(path, HangupTonePlayer.assetPath);
+          return _assetData();
+        },
+      );
 
-    final firstPlay = player.play();
-    final secondPlay = player.play();
-    expect(identical(firstPlay, secondPlay), isTrue);
-    await Future.wait([firstPlay, secondPlay]);
-    await player.dispose();
-    await player.dispose();
+      final firstPlay = player.play();
+      final secondPlay = player.play();
+      expect(identical(firstPlay, secondPlay), isTrue);
+      await Future.wait([firstPlay, secondPlay]);
+      await player.dispose();
+      await player.dispose();
 
-    expect(events, [
-      'start:24000',
-      'feed:36480',
-      'finish',
-      'delay:900',
-      'dispose',
-    ]);
-  });
+      expect(loads, 1);
+      expect(events, ['play:4', 'dispose']);
+    },
+  );
 
-  for (final stage in ['start', 'feed', 'delay']) {
-    test(
-      'dispose during $stage waits for playback and releases once',
-      () async {
-        final events = <String>[];
-        final gate = Completer<void>();
-        final delayEntered = Completer<void>();
-        final output = FakeHangupToneOutput(
-          events: events,
-          startGate: stage == 'start' ? gate : null,
-          feedGate: stage == 'feed' ? gate : null,
-        );
-        final player = HangupTonePlayer(
-          output: output,
-          delay: (duration) async {
-            events.add('delay:${duration.inMilliseconds}');
-            delayEntered.complete();
-            if (stage == 'delay') await gate.future;
-          },
-        );
+  test(
+    'dispose during asset loading waits for playback and releases once',
+    () async {
+      final events = <String>[];
+      final loadEntered = Completer<void>();
+      final loadGate = Completer<void>();
+      final output = FakeHangupToneOutput(events: events);
+      final player = HangupTonePlayer(
+        output: output,
+        assetLoader: (path) async {
+          loadEntered.complete();
+          await loadGate.future;
+          return _assetData();
+        },
+      );
 
-        final play = player.play();
-        await switch (stage) {
-          'start' => output.startEntered.future,
-          'feed' => output.feedEntered.future,
-          _ => delayEntered.future,
-        };
+      final play = player.play();
+      await loadEntered.future;
+      var disposeCompleted = false;
+      final dispose = player.dispose().then((_) => disposeCompleted = true);
+      await Future<void>.delayed(Duration.zero);
+      expect(disposeCompleted, isFalse);
 
-        var firstDisposeCompleted = false;
-        var secondDisposeCompleted = false;
-        final firstDispose = player.dispose().then(
-          (_) => firstDisposeCompleted = true,
-        );
-        final secondDispose = player.dispose().then(
-          (_) => secondDisposeCompleted = true,
-        );
-        await Future<void>.delayed(Duration.zero);
-        final firstCompletedBeforePlayback = firstDisposeCompleted;
-        final secondCompletedBeforePlayback = secondDisposeCompleted;
+      loadGate.complete();
+      await Future.wait([play, dispose]);
+      expect(events, ['play:4', 'dispose']);
+    },
+  );
 
-        gate.complete();
-        await Future.wait([play, firstDispose, secondDispose]);
-        await player.dispose();
+  test(
+    'dispose during playback waits for playback and releases once',
+    () async {
+      final events = <String>[];
+      final playGate = Completer<void>();
+      final output = FakeHangupToneOutput(events: events, playGate: playGate);
+      final player = HangupTonePlayer(
+        output: output,
+        assetLoader: (_) async => _assetData(),
+      );
 
-        expect(firstCompletedBeforePlayback, isFalse);
-        expect(secondCompletedBeforePlayback, isFalse);
-        expect(events, [
-          'start:24000',
-          'feed:36480',
-          'finish',
-          'delay:900',
-          'dispose',
-        ]);
-      },
-    );
-  }
+      final play = player.play();
+      await output.playEntered.future;
+      var firstDisposeCompleted = false;
+      var secondDisposeCompleted = false;
+      final firstDispose = player.dispose().then(
+        (_) => firstDisposeCompleted = true,
+      );
+      final secondDispose = player.dispose().then(
+        (_) => secondDisposeCompleted = true,
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(firstDisposeCompleted, isFalse);
+      expect(secondDisposeCompleted, isFalse);
+
+      playGate.complete();
+      await Future.wait([play, firstDispose, secondDispose]);
+      await player.dispose();
+      expect(events, ['play:4', 'dispose']);
+    },
+  );
 
   test('concurrent dispose waits for one output release', () async {
     final events = <String>[];
@@ -196,16 +149,14 @@ void main() {
     await output.disposeEntered.future;
     final secondDispose = player.dispose().then((_) => secondCompleted = true);
     await Future<void>.delayed(Duration.zero);
-    final firstCompletedBeforeRelease = firstCompleted;
-    final secondCompletedBeforeRelease = secondCompleted;
+    expect(firstCompleted, isFalse);
+    expect(secondCompleted, isFalse);
 
     disposeGate.complete();
     await Future.wait([firstDispose, secondDispose]);
     await player.dispose();
     await player.play();
 
-    expect(firstCompletedBeforeRelease, isFalse);
-    expect(secondCompletedBeforeRelease, isFalse);
     expect(events, ['dispose']);
   });
 }

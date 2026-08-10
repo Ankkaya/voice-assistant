@@ -1,52 +1,60 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
-
-import 'audio_player.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_sound/flutter_sound.dart';
 
 abstract interface class HangupToneOutput {
-  Future<void> start(int sampleRate);
-
-  Future<void> feed(Uint8List bytes);
-
-  Future<void> finish();
+  Future<void> play(Uint8List mp3Bytes);
 
   Future<void> dispose();
 }
 
-final class PcmHangupToneOutput implements HangupToneOutput {
-  PcmHangupToneOutput({PcmAudioPlayer? player})
-    : _player = player ?? PcmAudioPlayer();
+final class Mp3HangupToneOutput implements HangupToneOutput {
+  Mp3HangupToneOutput({FlutterSoundPlayer? player})
+    : _player = player ?? FlutterSoundPlayer();
 
-  final PcmAudioPlayer _player;
-
-  @override
-  Future<void> start(int sampleRate) => _player.start(sampleRate);
+  final FlutterSoundPlayer _player;
+  bool _opened = false;
 
   @override
-  Future<void> feed(Uint8List bytes) => _player.feed(bytes);
+  Future<void> play(Uint8List mp3Bytes) async {
+    if (!_opened) {
+      await _player.openPlayer();
+      _opened = true;
+    }
+
+    final finished = Completer<void>();
+    await _player.startPlayer(
+      codec: Codec.mp3,
+      fromDataBuffer: mp3Bytes,
+      whenFinished: () {
+        if (!finished.isCompleted) finished.complete();
+      },
+    );
+    await finished.future;
+  }
 
   @override
-  Future<void> finish() => _player.finish();
-
-  @override
-  Future<void> dispose() => _player.dispose();
+  Future<void> dispose() async {
+    if (!_opened) return;
+    await _player.stopPlayer();
+    await _player.closePlayer();
+    _opened = false;
+  }
 }
 
 final class HangupTonePlayer {
   HangupTonePlayer({
     HangupToneOutput? output,
-    Future<void> Function(Duration)? delay,
-  }) : _output = output ?? PcmHangupToneOutput(),
-       _delay = delay ?? Future<void>.delayed;
+    Future<ByteData> Function(String key)? assetLoader,
+  }) : _output = output ?? Mp3HangupToneOutput(),
+       _assetLoader = assetLoader ?? rootBundle.load;
 
-  static const sampleRate = 24000;
-  static const duration = Duration(milliseconds: 760);
-  static const playbackTail = Duration(milliseconds: 140);
+  static const assetPath = 'assets/audio/hangup.mp3';
 
   final HangupToneOutput _output;
-  final Future<void> Function(Duration) _delay;
+  final Future<ByteData> Function(String key) _assetLoader;
   Future<void>? _playFuture;
   Future<void>? _disposeFuture;
   Future<void>? _outputDisposeFuture;
@@ -59,10 +67,12 @@ final class HangupTonePlayer {
 
   Future<void> _playOnce() async {
     try {
-      await _output.start(sampleRate);
-      await _output.feed(buildTone());
-      await _output.finish();
-      await _delay(duration + playbackTail);
+      final asset = await _assetLoader(assetPath);
+      final mp3Bytes = asset.buffer.asUint8List(
+        asset.offsetInBytes,
+        asset.lengthInBytes,
+      );
+      await _output.play(mp3Bytes);
     } finally {
       await _disposeOutputOnce();
     }
@@ -88,41 +98,13 @@ final class HangupTonePlayer {
   }
 
   @visibleForTesting
-  static Uint8List buildTone() {
-    const firstEndMs = 260.0;
-    const secondStartMs = 330.0;
-    const secondEndMs = 730.0;
-    const fadeMs = 18.0;
-    final sampleCount = sampleRate * duration.inMilliseconds ~/ 1000;
-    final data = ByteData(sampleCount * 2);
-
-    for (var index = 0; index < sampleCount; index++) {
-      final milliseconds = index * 1000 / sampleRate;
-      final (
-        frequency,
-        segmentPosition,
-        segmentLength,
-      ) = milliseconds < firstEndMs
-          ? (620.0, milliseconds, firstEndMs)
-          : milliseconds >= secondStartMs && milliseconds < secondEndMs
-          ? (440.0, milliseconds - secondStartMs, secondEndMs - secondStartMs)
-          : (0.0, 0.0, 0.0);
-      final envelope = frequency == 0
-          ? 0.0
-          : math.min(
-              1.0,
-              math.min(
-                segmentPosition / fadeMs,
-                (segmentLength - segmentPosition) / fadeMs,
-              ),
-            );
-      final seconds = index / sampleRate;
-      final sample =
-          (math.sin(2 * math.pi * frequency * seconds) * envelope * 18000)
-              .round()
-              .clamp(-32768, 32767);
-      data.setInt16(index * 2, sample, Endian.little);
-    }
-    return data.buffer.asUint8List();
+  static bool isMp3File(Uint8List bytes) {
+    if (bytes.lengthInBytes < 3) return false;
+    final hasId3Tag = String.fromCharCodes(bytes.sublist(0, 3)) == 'ID3';
+    final hasFrameSync =
+        bytes.lengthInBytes >= 2 &&
+        bytes[0] == 0xff &&
+        (bytes[1] & 0xe0) == 0xe0;
+    return hasId3Tag || hasFrameSync;
   }
 }

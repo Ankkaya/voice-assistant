@@ -30,6 +30,7 @@ class CallPage extends StatefulWidget {
     this.autoConnect = true,
     this.incomingCall = true,
     this.voiceSelection = const VoiceSelection(mode: VoiceMode.preset),
+    this.audioPlayer,
     this.audioCleanupOverride,
     this.hangupTonePlaybackOverride,
     super.key,
@@ -40,6 +41,8 @@ class CallPage extends StatefulWidget {
   final bool autoConnect;
   final bool incomingCall;
   final VoiceSelection voiceSelection;
+  @visibleForTesting
+  final PcmAudioPlayer? audioPlayer;
   @visibleForTesting
   final Future<void> Function()? audioCleanupOverride;
   @visibleForTesting
@@ -64,6 +67,7 @@ class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
   StreamSubscription<VoiceEvent>? _eventSubscription;
   final Uuid _uuid = const Uuid();
   Future<void> _audioWork = Future<void>.value();
+  Future<void>? _playbackStopFuture;
   bool _ending = false;
   bool _resourcesDisposed = false;
   late bool _accepted;
@@ -78,7 +82,7 @@ class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
         CallController(character: widget.character, socket: VoiceSocket());
     _capture = AudioCapture();
     _vad = PcmVad();
-    _player = PcmAudioPlayer();
+    _player = widget.audioPlayer ?? PcmAudioPlayer();
     _ringtone = RingtonePlayer();
     if (widget.hangupTonePlaybackOverride == null) {
       _hangupTone = HangupTonePlayer();
@@ -89,7 +93,10 @@ class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
       if (mounted) setState(() => _viewState = state);
     });
     _audioSubscription = _controller.assistantAudio.listen((chunk) {
-      _audioWork = _audioWork.then((_) => _player.feed(chunk));
+      _audioWork = _audioWork.then((_) async {
+        if (_ending) return;
+        await _player.feed(chunk);
+      });
     });
     _eventSubscription = _controller.processedEvents.listen(_handleVoiceEvent);
     if (widget.autoConnect) {
@@ -137,13 +144,17 @@ class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
     switch (event) {
       case AssistantAudioStart(:final sampleRate):
         _audioWork = _audioWork.then((_) async {
+          if (_ending) return;
           await _stopListening();
+          if (_ending) return;
           await _player.start(sampleRate);
         });
         break;
       case AssistantAudioEnd():
         _audioWork = _audioWork.then((_) async {
+          if (_ending) return;
           await _player.finish();
+          if (_ending) return;
           if (_controller.viewState.phase == CallPhase.listening) {
             await _startListening();
           }
@@ -151,7 +162,10 @@ class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
         break;
       case TurnErrorEvent(:final recoverable):
         if (recoverable) {
-          _audioWork = _audioWork.then((_) => _startListening());
+          _audioWork = _audioWork.then((_) async {
+            if (_ending) return;
+            await _startListening();
+          });
         }
         break;
       default:
@@ -211,6 +225,7 @@ class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
   }) async {
     if (_ending) return;
     _ending = true;
+    final playbackStopped = _stopPlaybackImmediately();
 
     final audioSubscription = _audioSubscription;
     _audioSubscription = null;
@@ -234,8 +249,10 @@ class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
     );
     if (playHangupTone) {
       unawaited(
-        _ignoreFailure(
-          widget.hangupTonePlaybackOverride?.call ?? _hangupTone!.play,
+        playbackStopped.then(
+          (_) => _ignoreFailure(
+            widget.hangupTonePlaybackOverride?.call ?? _hangupTone!.play,
+          ),
         ),
       );
     }
@@ -245,6 +262,7 @@ class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
   Future<void> _disposeAudioResources() async {
     if (_resourcesDisposed) return;
     _resourcesDisposed = true;
+    await _stopPlaybackImmediately();
     await _stopListening();
     try {
       await _audioWork;
@@ -254,6 +272,10 @@ class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
     await _ringtone.dispose();
     await _player.dispose();
     await _capture.dispose();
+  }
+
+  Future<void> _stopPlaybackImmediately() {
+    return _playbackStopFuture ??= _ignoreFailure(_player.stop);
   }
 
   @override

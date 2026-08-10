@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:child_voice_call/audio/audio_player.dart';
 import 'package:child_voice_call/controllers/call_controller.dart';
 import 'package:child_voice_call/controllers/call_state.dart';
 import 'package:child_voice_call/models/character.dart';
@@ -36,6 +37,29 @@ class PageTestSocket implements VoiceSocketClient {
     if (closeError case final error?) throw error;
     await closeWait;
   }
+}
+
+class PageTestPcmOutput implements PcmAudioOutput {
+  final events = <String>[];
+
+  @override
+  Future<void> open() async => events.add('open');
+
+  @override
+  Future<void> startStream(int sampleRate) async {
+    events.add('start:$sampleRate');
+  }
+
+  @override
+  Future<void> feed(Uint8List bytes) async {
+    events.add('feed:${bytes.lengthInBytes}');
+  }
+
+  @override
+  Future<void> stop() async => events.add('stop');
+
+  @override
+  Future<void> close() async => events.add('close');
 }
 
 const character = Character(
@@ -75,6 +99,7 @@ Future<Completer<CallPageResult?>> openCallRoute(
   bool autoConnect = false,
   Character callCharacter = character,
   List<String>? routeEvents,
+  PcmAudioPlayer? audioPlayer,
 }) async {
   final result = Completer<CallPageResult?>();
   await tester.pumpWidget(
@@ -91,6 +116,7 @@ Future<Completer<CallPageResult?>> openCallRoute(
                       controller: controller,
                       autoConnect: autoConnect,
                       incomingCall: incomingCall,
+                      audioPlayer: audioPlayer,
                       audioCleanupOverride: cleanup,
                       hangupTonePlaybackOverride: playHangupTone,
                     ),
@@ -299,6 +325,34 @@ void main() {
     socketClose.complete();
     cleanup.complete();
     playback.complete();
+  });
+
+  testWidgets('active hangup stops assistant audio before returning', (
+    tester,
+  ) async {
+    final output = PageTestPcmOutput();
+    final player = PcmAudioPlayer(output: output);
+    await player.start(24000);
+    await player.feed(Uint8List(4800));
+    final controller = CallController(
+      character: character,
+      socket: PageTestSocket(),
+    );
+    addTearDown(controller.dispose);
+
+    await openCallRoute(
+      tester,
+      controller: controller,
+      incomingCall: false,
+      cleanup: () async {},
+      playHangupTone: () async {},
+      audioPlayer: player,
+    );
+
+    await tester.tap(find.byKey(const Key('hangup_button')));
+    await tester.pump();
+
+    expect(output.events, contains('stop'));
   });
 
   testWidgets('repeated active hangup taps play only one tone', (tester) async {

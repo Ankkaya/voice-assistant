@@ -1,30 +1,93 @@
-import 'dart:typed_data';
+import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_sound/flutter_sound.dart';
 
-class PcmAudioPlayer {
-  PcmAudioPlayer({FlutterSoundPlayer? player})
+abstract interface class PcmAudioOutput {
+  Future<void> open();
+
+  Future<void> startStream(int sampleRate);
+
+  Future<void> feed(Uint8List bytes);
+
+  Future<void> stop();
+
+  Future<void> close();
+}
+
+final class FlutterSoundPcmAudioOutput implements PcmAudioOutput {
+  FlutterSoundPcmAudioOutput({FlutterSoundPlayer? player})
     : _player = player ?? FlutterSoundPlayer();
 
   final FlutterSoundPlayer _player;
+
+  @override
+  Future<void> open() async {
+    await _player.openPlayer();
+  }
+
+  @override
+  Future<void> startStream(int sampleRate) {
+    return _player.startPlayerFromStream(
+      codec: Codec.pcm16,
+      numChannels: 1,
+      sampleRate: sampleRate,
+      interleaved: true,
+      bufferSize: 4096,
+    );
+  }
+
+  @override
+  Future<void> feed(Uint8List bytes) async {
+    await _player.feedUint8FromStream(bytes);
+  }
+
+  @override
+  Future<void> stop() => _player.stopPlayer();
+
+  @override
+  Future<void> close() => _player.closePlayer();
+}
+
+class PcmAudioPlayer {
+  PcmAudioPlayer({
+    PcmAudioOutput? output,
+    @visibleForTesting DateTime Function()? clock,
+    @visibleForTesting Future<void> Function(Duration)? delay,
+  }) : _output = output ?? FlutterSoundPcmAudioOutput(),
+       _clock = clock ?? DateTime.now,
+       _delay = delay ?? Future<void>.delayed;
+
+  static const _prebufferDuration = Duration(milliseconds: 100);
+  static const _playbackTail = Duration(milliseconds: 80);
+
+  final PcmAudioOutput _output;
+  final DateTime Function() _clock;
+  final Future<void> Function(Duration) _delay;
   final List<Uint8List> _pending = [];
   bool _opened = false;
   bool _streamStarted = false;
   int _sampleRate = 24000;
   int _pendingBytes = 0;
+  DateTime? _expectedPlaybackEnd;
+  int _generation = 0;
 
   Future<void> start(int sampleRate) async {
+    final generation = ++_generation;
     if (!_opened) {
-      await _player.openPlayer();
+      await _output.open();
       _opened = true;
+      if (generation != _generation) return;
     }
     if (_streamStarted) {
-      await _player.stopPlayer();
+      await _output.stop();
+      if (generation != _generation) return;
     }
     _sampleRate = sampleRate;
     _pending.clear();
     _pendingBytes = 0;
     _streamStarted = false;
+    _expectedPlaybackEnd = null;
   }
 
   Future<void> feed(Uint8List bytes) async {
@@ -32,43 +95,77 @@ class PcmAudioPlayer {
       throw StateError('PCM player must be started before feeding audio');
     }
     if (!_streamStarted) {
+      final generation = _generation;
       _pending.add(Uint8List.fromList(bytes));
       _pendingBytes += bytes.lengthInBytes;
-      final prebufferBytes = (_sampleRate * 2 * 0.1).round();
+      final prebufferBytes =
+          _sampleRate * 2 * _prebufferDuration.inMilliseconds ~/ 1000;
       if (_pendingBytes < prebufferBytes) return;
-      await _startStream();
+      await _startStream(generation);
       return;
     }
-    await _player.feedUint8FromStream(bytes);
+    await _feedToOutput(bytes, _generation);
   }
 
   Future<void> finish() async {
+    final generation = _generation;
     if (_opened && !_streamStarted && _pending.isNotEmpty) {
-      await _startStream();
+      await _startStream(generation);
+    }
+    if (generation != _generation || !_streamStarted) return;
+
+    final expectedEnd = _expectedPlaybackEnd;
+    if (expectedEnd != null) {
+      final remaining = expectedEnd.difference(_clock()) + _playbackTail;
+      if (remaining > Duration.zero) await _delay(remaining);
+    }
+    if (generation != _generation) return;
+    await _output.stop();
+    _streamStarted = false;
+    _expectedPlaybackEnd = null;
+  }
+
+  Future<void> _startStream(int generation) async {
+    if (generation != _generation) return;
+    await _output.startStream(_sampleRate);
+    _streamStarted = true;
+    if (generation != _generation) {
+      await _output.stop();
+      _streamStarted = false;
+      return;
+    }
+    final pending = List<Uint8List>.of(_pending);
+    _pending.clear();
+    _pendingBytes = 0;
+    for (final chunk in pending) {
+      if (generation != _generation) break;
+      await _feedToOutput(chunk, generation);
     }
   }
 
-  Future<void> _startStream() async {
-    await _player.startPlayerFromStream(
-      codec: Codec.pcm16,
-      numChannels: 1,
-      sampleRate: _sampleRate,
-      interleaved: true,
-      bufferSize: 4096,
-    );
-    _streamStarted = true;
-    for (final chunk in _pending) {
-      await _player.feedUint8FromStream(chunk);
-    }
-    _pending.clear();
-    _pendingBytes = 0;
+  Future<void> _feedToOutput(Uint8List bytes, int generation) async {
+    if (generation != _generation) return;
+    await _output.feed(bytes);
+    if (generation != _generation) return;
+    final now = _clock();
+    final previousEnd = _expectedPlaybackEnd;
+    final startsAt = previousEnd != null && previousEnd.isAfter(now)
+        ? previousEnd
+        : now;
+    final microseconds =
+        bytes.lengthInBytes *
+        Duration.microsecondsPerSecond ~/
+        (_sampleRate * 2);
+    _expectedPlaybackEnd = startsAt.add(Duration(microseconds: microseconds));
   }
 
   Future<void> stop() async {
+    _generation++;
     _pending.clear();
     _pendingBytes = 0;
+    _expectedPlaybackEnd = null;
     if (_opened && _streamStarted) {
-      await _player.stopPlayer();
+      await _output.stop();
     }
     _streamStarted = false;
   }
@@ -76,7 +173,7 @@ class PcmAudioPlayer {
   Future<void> dispose() async {
     await stop();
     if (_opened) {
-      await _player.closePlayer();
+      await _output.close();
       _opened = false;
     }
   }

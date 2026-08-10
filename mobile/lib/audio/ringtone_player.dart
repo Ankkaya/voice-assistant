@@ -1,76 +1,135 @@
 import 'dart:async';
-import 'dart:math' as math;
-import 'dart:typed_data';
 
-import 'audio_player.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_sound/flutter_sound.dart';
+
+abstract interface class RingtoneOutput {
+  Future<void> open();
+
+  Future<void> play(Uint8List mp3Bytes, void Function() onFinished);
+
+  Future<void> stop();
+
+  Future<void> close();
+}
+
+final class Mp3RingtoneOutput implements RingtoneOutput {
+  Mp3RingtoneOutput({FlutterSoundPlayer? player})
+    : _player = player ?? FlutterSoundPlayer();
+
+  final FlutterSoundPlayer _player;
+  bool _opened = false;
+
+  @override
+  Future<void> open() async {
+    if (_opened) return;
+    await _player.openPlayer();
+    _opened = true;
+  }
+
+  @override
+  Future<void> play(Uint8List mp3Bytes, void Function() onFinished) async {
+    await _player.startPlayer(
+      codec: Codec.mp3,
+      fromDataBuffer: mp3Bytes,
+      whenFinished: onFinished,
+    );
+  }
+
+  @override
+  Future<void> stop() async {
+    if (_opened) await _player.stopPlayer();
+  }
+
+  @override
+  Future<void> close() async {
+    if (!_opened) return;
+    await _player.closePlayer();
+    _opened = false;
+  }
+}
 
 class RingtonePlayer {
-  RingtonePlayer({PcmAudioPlayer? player})
-    : _player = player ?? PcmAudioPlayer();
+  RingtonePlayer({
+    RingtoneOutput? output,
+    Future<ByteData> Function(String key)? assetLoader,
+  }) : _output = output ?? Mp3RingtoneOutput(),
+       _assetLoader = assetLoader ?? rootBundle.load;
 
-  static const _sampleRate = 24000;
-  static const _cycle = Duration(milliseconds: 2400);
+  static const assetPath = 'assets/audio/ringtone.mp3';
 
-  final PcmAudioPlayer _player;
-  Timer? _timer;
+  final RingtoneOutput _output;
+  final Future<ByteData> Function(String key) _assetLoader;
   Future<void> _work = Future<void>.value();
+  Uint8List? _mp3Bytes;
   bool _playing = false;
   bool _disposed = false;
 
   Future<void> start() async {
     if (_playing || _disposed) return;
     _playing = true;
-    final pattern = _buildPattern();
-    await _player.start(_sampleRate);
-    await _player.feed(pattern);
-    _timer = Timer.periodic(_cycle, (_) {
-      if (!_playing) return;
-      _work = _work.then((_) => _player.feed(pattern));
+    _work = _loadAndStart();
+    try {
+      await _work;
+    } on Object {
+      _playing = false;
+      rethrow;
+    }
+  }
+
+  Future<void> _loadAndStart() async {
+    final asset = await _assetLoader(assetPath);
+    if (!_playing) return;
+    _mp3Bytes = asset.buffer.asUint8List(
+      asset.offsetInBytes,
+      asset.lengthInBytes,
+    );
+    await _output.open();
+    if (!_playing) return;
+    await _playOnce();
+  }
+
+  Future<void> _playOnce() async {
+    final bytes = _mp3Bytes;
+    if (!_playing || bytes == null) return;
+    await _output.play(bytes, _onPlaybackFinished);
+  }
+
+  void _onPlaybackFinished() {
+    if (!_playing) return;
+    _work = _work.then((_) => _playOnce()).catchError((Object _) {
+      _playing = false;
     });
   }
 
   Future<void> stop() async {
     if (!_playing) return;
     _playing = false;
-    _timer?.cancel();
-    _timer = null;
     try {
       await _work;
     } on Object {
       // A ringtone failure must never block answering or declining a call.
     }
-    await _player.stop();
+    await _output.stop();
   }
 
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
     await stop();
-    await _player.dispose();
+    await _output.close();
+    _mp3Bytes = null;
   }
 
-  static Uint8List _buildPattern() {
-    final sampleCount = (_sampleRate * _cycle.inMilliseconds / 1000).round();
-    final data = ByteData(sampleCount * 2);
-    for (var i = 0; i < sampleCount; i++) {
-      final seconds = i / _sampleRate;
-      final position = seconds % 2.4;
-      final ringing = position < 0.42 || (position >= 0.62 && position < 1.04);
-      final envelope = ringing ? _edgeEnvelope(position) : 0.0;
-      final wave =
-          math.sin(2 * math.pi * 440 * seconds) +
-          math.sin(2 * math.pi * 520 * seconds);
-      final sample = (wave * envelope * 4200).round().clamp(-32768, 32767);
-      data.setInt16(i * 2, sample, Endian.little);
-    }
-    return data.buffer.asUint8List();
-  }
-
-  static double _edgeEnvelope(double position) {
-    final withinBurst = position < 0.42 ? position : position - 0.62;
-    const fade = 0.025;
-    if (withinBurst < fade) return withinBurst / fade;
-    if (withinBurst > 0.42 - fade) return (0.42 - withinBurst) / fade;
-    return 1;
+  @visibleForTesting
+  static bool isMp3File(Uint8List bytes) {
+    if (bytes.lengthInBytes < 3) return false;
+    final hasId3Tag = String.fromCharCodes(bytes.sublist(0, 3)) == 'ID3';
+    final hasFrameSync =
+        bytes.lengthInBytes >= 2 &&
+        bytes[0] == 0xff &&
+        (bytes[1] & 0xe0) == 0xe0;
+    return hasId3Tag || hasFrameSync;
   }
 }

@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'controllers/character_catalog_controller.dart';
 import 'pages/character_editor_page.dart';
 import 'pages/character_page.dart';
+import 'pages/startup_page.dart';
 import 'theme/app_colors.dart';
 
 class VoiceCallApp extends StatelessWidget {
@@ -28,7 +31,7 @@ class VoiceCallApp extends StatelessWidget {
       displayColor: AppColors.textPrimary,
     );
     return MaterialApp(
-      title: 'AI 角色电话',
+      title: '嗨呀',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: colorScheme,
@@ -118,10 +121,23 @@ class VoiceCallApp extends StatelessWidget {
           ),
         ),
       ),
-      home: CharacterPage(
-        characterSettingsBuilder: (_, character) =>
-            CharacterEditorPage(character: character),
-      ),
+      home: const _AppHome(),
+    );
+  }
+}
+
+class _AppHome extends ConsumerWidget {
+  const _AppHome();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final catalog = ref.watch(charactersProvider);
+    if (catalog.isLoading && !catalog.hasValue) {
+      return const StartupPage();
+    }
+    return CharacterPage(
+      characterSettingsBuilder: (_, character) =>
+          CharacterEditorPage(character: character),
     );
   }
 }

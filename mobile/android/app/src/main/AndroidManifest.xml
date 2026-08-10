@@ -4,8 +4,10 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <application
-        android:label="AI 角色电话"
-        android:name="${applicationName}">
+        android:icon="@mipmap/ic_launcher"
+        android:label="嗨呀"
+        android:name="${applicationName}"
+        android:roundIcon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"
             android:exported="true"
