@@ -172,7 +172,7 @@ $tagCommit = ((Invoke-NativeCapture git @('rev-list', '-n', '1', $Tag) $repoRoot
 if ($tagCommit -ne $commitSha) {
     throw "$Tag does not point to the current commit $commitSha."
 }
-$remoteTagLines = Invoke-NativeCapture git @('ls-remote', 'origin', "refs/tags/$Tag^{}") $repoRoot
+$remoteTagLines = @(Invoke-NativeCapture git @('ls-remote', 'origin', "refs/tags/$Tag^{}") $repoRoot)
 if ($remoteTagLines.Count -eq 0) {
     throw "Annotated tag $Tag is not present on origin."
 }
