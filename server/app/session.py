@@ -66,6 +66,7 @@ class VoiceSession:
         tts: TtsProvider,
         transport: SessionTransport,
         max_duration_seconds: int = 600,
+        agent_timeout_seconds: float = 30.0,
         session_id: str | None = None,
         reference_store: VoiceReferenceStore | None = None,
     ) -> None:
@@ -82,6 +83,7 @@ class VoiceSession:
         self._audio = bytearray()
         self._empty_asr_count = 0
         self._max_duration_seconds = max_duration_seconds
+        self._agent_timeout_seconds = agent_timeout_seconds
         self._deadline_task: asyncio.Task | None = None
         self._active_task: asyncio.Task | None = None
         self._reference_store = reference_store
@@ -220,7 +222,7 @@ class VoiceSession:
         try:
             reply = await asyncio.wait_for(
                 self._agent.reply(self._character, self.history, transcript),
-                timeout=15.0,
+                timeout=self._agent_timeout_seconds,
             )
         except TimeoutError:
             await self._send_error("agent", "UPSTREAM_TIMEOUT", True)

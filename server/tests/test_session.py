@@ -1,3 +1,4 @@
+import asyncio
 import json
 
 import pytest
@@ -45,6 +46,12 @@ class FakeAgent:
         if isinstance(self.reply_text, Exception):
             raise self.reply_text
         return self.reply_text
+
+
+class SlowAgent(FakeAgent):
+    async def reply(self, character, history, user_text):
+        await asyncio.sleep(0.05)
+        return await super().reply(character, history, user_text)
 
 
 class FakeTts:
@@ -99,7 +106,14 @@ def custom_session_start(description="喜欢用有趣的小实验解释问题"):
 def make_session(registry, option_registry):
     sessions = []
 
-    def factory(asr=None, agent=None, tts=None, transport=None, reference_store=None):
+    def factory(
+        asr=None,
+        agent=None,
+        tts=None,
+        transport=None,
+        reference_store=None,
+        agent_timeout_seconds=30.0,
+    ):
         store = reference_store or VoiceReferenceStore()
         session = VoiceSession(
             character_resolver=SessionCharacterResolver(
@@ -113,6 +127,7 @@ def make_session(registry, option_registry):
             tts=tts or FakeTts(),
             transport=transport or FakeTransport(),
             max_duration_seconds=0,
+            agent_timeout_seconds=agent_timeout_seconds,
             reference_store=store,
         )
         sessions.append(session)
@@ -234,6 +249,25 @@ async def test_empty_asr_result_sends_recoverable_error(make_session):
 
     assert transport.events[-1]["type"] == "turn.error"
     assert transport.events[-1]["code"] == "EMPTY_RESULT"
+    assert transport.events[-1]["recoverable"] is True
+    assert session.state is SessionState.LISTENING
+
+
+@pytest.mark.asyncio
+async def test_agent_timeout_is_configurable_and_recovers(make_session):
+    transport = FakeTransport()
+    session = make_session(
+        transport=transport,
+        agent=SlowAgent(),
+        agent_timeout_seconds=0.01,
+    )
+    await session.handle_text(session_start())
+    await session.handle_text(audio_start())
+    await session.handle_audio(b"\x00\x00" * 5000)
+
+    await session.handle_text(audio_commit())
+
+    assert transport.events[-1]["code"] == "UPSTREAM_TIMEOUT"
     assert transport.events[-1]["recoverable"] is True
     assert session.state is SessionState.LISTENING
 

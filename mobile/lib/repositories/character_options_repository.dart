@@ -24,7 +24,8 @@ class CharacterOptionsRepository {
       await bundle.loadString('assets/character_options.json'),
     );
     try {
-      return _decode(await cacheFile.readAsString());
+      final cached = _decode(await cacheFile.readAsString());
+      return cached.optionsVersion > bundled.optionsVersion ? cached : bundled;
     } on Object {
       return bundled;
     }

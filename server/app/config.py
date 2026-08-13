@@ -1,7 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import SecretStr, model_validator
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     llm_base_url: str = ""
     llm_api_key: SecretStr | None = None
     llm_api_key_file: Path | None = None
+    agent_timeout_seconds: float = Field(default=30.0, gt=0, le=120)
 
     voice_host: str = "0.0.0.0"
     voice_port: int = 8000

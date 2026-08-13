@@ -144,7 +144,7 @@ class VoiceSelectorState extends State<VoiceSelector> {
         return;
       }
       if (picked.size > maxVoiceReferenceBytes) {
-        setState(() => _errorText = '参考音频不能超过 10 MB');
+        setState(() => _errorText = '参考音频不能超过 7.5 MB');
         return;
       }
       setState(() {
@@ -253,8 +253,10 @@ class VoiceSelectorState extends State<VoiceSelector> {
             maxLines: 5,
             maxLength: 500,
             decoration: const InputDecoration(
-              labelText: '描述希望生成的声音',
-              hintText: '例如：温暖、明亮的少年声音，语速适中……',
+              labelText: '音色描述（1～4 句）',
+              hintText: '例如：十岁左右的少年男声，清亮温暖、活泼自信，普通话清晰，语速适中。',
+              helperText: '建议包含年龄与性别、音色质感、情绪语气、语速节奏；也可补充角色或场景。',
+              helperMaxLines: 3,
               alignLabelWithHint: true,
               border: OutlineInputBorder(),
             ),
@@ -304,7 +306,7 @@ class VoiceSelectorState extends State<VoiceSelector> {
                 : null,
           ),
           const Text(
-            '参考音频仅保存在本机，文件不超过 10 MB。',
+            '支持 WAV / MP3，文件不超过 7.5 MB；通话时会临时上传用于音色复刻。',
             style: TextStyle(color: AppColors.textMuted, fontSize: 12),
           ),
         ],

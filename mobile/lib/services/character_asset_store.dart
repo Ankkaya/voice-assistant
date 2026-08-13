@@ -4,7 +4,9 @@ import 'dart:math' as math;
 import 'package:image/image.dart' as img;
 
 const maxAvatarBytes = 2 * 1024 * 1024;
-const maxVoiceReferenceBytes = 10 * 1024 * 1024;
+// MiMo accepts at most 10 MB for the Base64 data URL. Reserve space for the
+// MIME prefix and account for Base64's 4/3 expansion.
+const maxVoiceReferenceBytes = ((10_000_000 - 32) ~/ 4) * 3;
 
 abstract interface class CharacterAssetStore {
   Future<String> importAvatar(String sourcePath, String characterId);
@@ -71,7 +73,7 @@ final class FileCharacterAssetStore implements CharacterAssetStore {
     final length = await source.length();
     if (length == 0) throw const FormatException('Reference audio is empty');
     if (length > maxVoiceReferenceBytes) {
-      throw RangeError('Reference audio exceeds 10 MB');
+      throw RangeError('Reference audio exceeds 7.5 MB');
     }
     final extension = source.path.toLowerCase().endsWith('.wav')
         ? '.wav'

@@ -38,6 +38,7 @@ class AppDependencies:
     agent: Any | None
     tts: Any | None
     ready: bool
+    agent_timeout_seconds: float = 30.0
     reference_store: VoiceReferenceStore = field(default_factory=VoiceReferenceStore)
 
 
@@ -73,6 +74,7 @@ def create_app(injected: AppDependencies | None = None) -> FastAPI:
                 agent=None,
                 tts=None,
                 ready=settings.providers_ready,
+                agent_timeout_seconds=settings.agent_timeout_seconds,
             )
             if settings.providers_ready:
                 client = httpx.AsyncClient()
@@ -152,7 +154,7 @@ def create_app(injected: AppDependencies | None = None) -> FastAPI:
         if not content:
             raise HTTPException(400, "Reference audio is empty")
         if len(content) > MAX_REFERENCE_BYTES:
-            raise HTTPException(413, "Reference audio exceeds 10 MB")
+            raise HTTPException(413, "Reference audio exceeds 7.5 MB")
         is_wav = mime_type == "audio/wav" and (
             len(content) >= 12
             and content.startswith(b"RIFF")
@@ -204,6 +206,7 @@ def create_app(injected: AppDependencies | None = None) -> FastAPI:
             agent=dependencies.agent,
             tts=dependencies.tts,
             transport=transport,
+            agent_timeout_seconds=dependencies.agent_timeout_seconds,
             reference_store=dependencies.reference_store,
         )
         try:

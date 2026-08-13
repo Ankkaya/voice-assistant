@@ -9,15 +9,22 @@ from app.character_options import CharacterOptionsRegistry, OptionKind
 def test_option_registry_exposes_public_labels_without_prompt_text(option_registry):
     payload = option_registry.public_payload()
 
-    assert payload["optionsVersion"] == 1
+    assert payload["optionsVersion"] == 2
     assert payload["identities"][0] == {
         "id": "adventure_companion",
         "label": "探险伙伴",
     }
     assert "promptText" not in payload["identities"][0]
     assert payload["presetVoices"] == [
-        {"id": "白桦", "label": "白桦"},
-        {"id": "苏打", "label": "苏打"},
+        {"id": "mimo_default", "label": "MiMo 默认（中文集群：冰糖）"},
+        {"id": "冰糖", "label": "冰糖 · 中文女声"},
+        {"id": "茉莉", "label": "茉莉 · 中文女声"},
+        {"id": "苏打", "label": "苏打 · 中文男声"},
+        {"id": "白桦", "label": "白桦 · 中文男声"},
+        {"id": "Mia", "label": "Mia · 英文女声"},
+        {"id": "Chloe", "label": "Chloe · 英文女声"},
+        {"id": "Milo", "label": "Milo · 英文男声"},
+        {"id": "Dean", "label": "Dean · 英文男声"},
     ]
 
 

@@ -63,3 +63,9 @@ def test_empty_secret_file_is_rejected(tmp_path):
 
     with pytest.raises(ValidationError, match="MIMO_API_KEY_FILE is empty"):
         Settings(_env_file=None, mimo_api_key_file=empty)
+
+
+def test_agent_timeout_defaults_to_thirty_seconds():
+    settings = Settings(_env_file=None)
+
+    assert settings.agent_timeout_seconds == 30.0

@@ -3,6 +3,7 @@ import json
 
 import httpx
 import pytest
+from pydantic import ValidationError
 
 from app.models import TtsConfig, TtsMode
 from app.providers.base import ProviderConfigError, ProviderError
@@ -97,7 +98,11 @@ async def test_voice_design_uses_description(httpx_mock):
     body = json.loads(httpx_mock.get_request().content)
     assert body["messages"][0]["content"] == "温暖活泼的年轻男声，普通话清晰"
     assert body["messages"][1]["content"] == "出发吧"
-    assert body["audio"]["format"] == "pcm16"
+    assert body["audio"] == {
+        "format": "pcm16",
+        "optimize_text_preview": False,
+    }
+    assert "voice" not in body["audio"]
 
 
 @pytest.mark.asyncio
@@ -118,6 +123,8 @@ async def test_voice_clone_embeds_authorized_reference(httpx_mock, tmp_path):
     voice = body["audio"]["voice"]
     assert voice.startswith("data:audio/wav;base64,")
     assert base64.b64decode(voice.split(",", 1)[1]) == b"RIFFauthorized"
+    assert body["messages"][1] == {"role": "assistant", "content": "你好"}
+    assert "optimize_text_preview" not in body["audio"]
 
 
 def test_clone_requires_existing_reference_audio(tmp_path):
@@ -141,6 +148,43 @@ def test_clone_accepts_in_memory_uploaded_reference():
     provider = XiaomiTtsProvider("test-key", client=httpx.AsyncClient())
 
     provider.validate(config)
+
+
+@pytest.mark.parametrize(
+    ("values", "message"),
+    [
+        (
+            {
+                "mode": "preset",
+                "model": "mimo-v2.5-tts-voicedesign",
+                "voice": "白桦",
+            },
+            "preset TTS requires mimo-v2.5-tts",
+        ),
+        (
+            {
+                "mode": "voice_design",
+                "model": "mimo-v2.5-tts-voicedesign",
+                "voice": "白桦",
+                "voiceDescription": "温暖清亮的少年声音",
+            },
+            "voice_design TTS only accepts voiceDescription",
+        ),
+        (
+            {
+                "mode": "voice_clone",
+                "model": "mimo-v2.5-tts-voiceclone",
+                "voiceDescription": "不应传入的描述",
+                "reference_audio_data": b"RIFFauthorized",
+                "reference_audio_mime": "audio/wav",
+            },
+            "voice_clone TTS only accepts reference audio",
+        ),
+    ],
+)
+def test_tts_config_rejects_model_or_mode_field_mismatch(values, message):
+    with pytest.raises(ValidationError, match=message):
+        TtsConfig.model_validate(values)
 
 
 @pytest.mark.asyncio

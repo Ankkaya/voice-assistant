@@ -35,9 +35,10 @@ MIMO_BASE_URL=https://token-plan-cn.xiaomimimo.com/v1
 
 LLM_PROVIDER=openai_compatible
 # 当前 MVP 的 LangChain Agent 也使用 MiMo OpenAI 兼容接口
-LLM_MODEL=mimo-v2.5
+LLM_MODEL=mimo-v2.5-pro
 LLM_BASE_URL=https://token-plan-cn.xiaomimimo.com/v1
 LLM_API_KEY=
+AGENT_TIMEOUT_SECONDS=30
 ```
 
 同一个 MiMo Token 可以同时填写到 `MIMO_API_KEY` 和 `LLM_API_KEY`。当前实现使用 OpenAI 兼容协议，不需要 `https://token-plan-cn.xiaomimimo.com/anthropic`。

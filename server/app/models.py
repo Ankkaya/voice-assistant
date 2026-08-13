@@ -19,20 +19,35 @@ class TtsConfig(BaseModel):
     reference_audio_data: bytes | None = Field(default=None, exclude=True)
     reference_audio_mime: str | None = Field(default=None, exclude=True)
 
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
     @model_validator(mode="after")
     def validate_mode_fields(self) -> "TtsConfig":
-        if self.mode is TtsMode.PRESET and not self.voice:
-            raise ValueError("preset TTS requires voice")
-        if self.mode is TtsMode.VOICE_DESIGN and not self.voice_description:
-            raise ValueError("voice_design TTS requires voiceDescription")
-        if (
-            self.mode is TtsMode.VOICE_CLONE
-            and not self.reference_audio_path
-            and not self.reference_audio_data
-        ):
-            raise ValueError("voice_clone TTS requires reference audio")
+        reference_supplied = bool(
+            self.reference_audio_path or self.reference_audio_data
+        )
+        if self.mode is TtsMode.PRESET:
+            if self.model != "mimo-v2.5-tts" or not self.voice:
+                raise ValueError("preset TTS requires mimo-v2.5-tts and voice")
+            if self.voice_description or reference_supplied:
+                raise ValueError("preset TTS only accepts voice")
+        elif self.mode is TtsMode.VOICE_DESIGN:
+            if (
+                self.model != "mimo-v2.5-tts-voicedesign"
+                or not self.voice_description
+            ):
+                raise ValueError(
+                    "voice_design TTS requires its model and voiceDescription"
+                )
+            if self.voice or reference_supplied:
+                raise ValueError("voice_design TTS only accepts voiceDescription")
+        else:
+            if self.model != "mimo-v2.5-tts-voiceclone" or not reference_supplied:
+                raise ValueError(
+                    "voice_clone TTS requires its model and reference audio"
+                )
+            if self.voice or self.voice_description:
+                raise ValueError("voice_clone TTS only accepts reference audio")
         return self
 
     def resolved_reference_path(self, base_dir: Path) -> Path | None:

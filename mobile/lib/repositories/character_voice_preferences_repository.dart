@@ -274,7 +274,7 @@ class CharacterVoicePreferencesRepository {
       throw const FormatException('Reference audio is empty');
     }
     if (length > maxVoiceReferenceBytes) {
-      throw RangeError('Reference audio exceeds 10 MB');
+      throw RangeError('Reference audio exceeds 7.5 MB');
     }
     final lowerPath = source.path.toLowerCase();
     final extension = lowerPath.endsWith('.wav')

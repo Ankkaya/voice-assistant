@@ -59,7 +59,7 @@ def test_character_options_endpoint():
         response = client.get("/api/character-options")
 
     assert response.status_code == 200
-    assert response.json()["optionsVersion"] == 1
+    assert response.json()["optionsVersion"] == 2
 
 
 def test_character_suggestion_endpoint():

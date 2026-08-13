@@ -334,7 +334,7 @@ void main() {
       );
     });
 
-    test('rejects files larger than 10 MB', () async {
+    test('rejects files whose Base64 data URL would exceed 10 MB', () async {
       final source = File('${temporaryDirectory.path}/oversized.wav');
       final handle = await source.open(mode: FileMode.write);
       await handle.truncate(maxVoiceReferenceBytes + 1);

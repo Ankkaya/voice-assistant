@@ -71,7 +71,12 @@ class XiaomiTtsProvider:
             ) as response:
                 self._raise_for_status(response.status_code)
                 lines = response.aiter_lines()
-                next_timeout = 15.0
+                # MiMo currently provides low-latency streaming only for the
+                # preset model. Voice design and clone return one compatible
+                # stream event after all inference has completed.
+                next_timeout = (
+                    15.0 if config.mode is TtsMode.PRESET else 45.0
+                )
                 while True:
                     try:
                         line = await asyncio.wait_for(anext(lines), timeout=next_timeout)

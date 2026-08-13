@@ -3,7 +3,9 @@ import uuid
 from dataclasses import dataclass
 
 
-MAX_REFERENCE_BYTES = 10 * 1024 * 1024
+# MiMo limits the Base64 data URL to 10 MB. Reserve enough bytes for the MIME
+# prefix, then account for Base64's 4/3 expansion.
+MAX_REFERENCE_BYTES = ((10_000_000 - 32) // 4) * 3
 REFERENCE_TTL_SECONDS = 30 * 60
 
 

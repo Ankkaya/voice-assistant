@@ -69,13 +69,28 @@ void main() {
         serverUri: Uri.parse('ws://localhost:8000/ws/voice?ignored=true'),
       );
 
-  test('load prefers valid cache over bundled options', () async {
+  test('load prefers a newer valid cache over bundled options', () async {
     await cacheFile.parent.create(recursive: true);
     await cacheFile.writeAsString(optionsJson(version: 2));
 
     final options = await repository(
       MockClient((_) async => http.Response('', 500)),
     ).load();
+
+    expect(options.optionsVersion, 2);
+  });
+
+  test('load ignores a valid but older cache', () async {
+    await cacheFile.parent.create(recursive: true);
+    await cacheFile.writeAsString(optionsJson(version: 1));
+    final bundled = CharacterOptionsRepository(
+      bundle: StringAssetBundle(optionsJson(version: 2)),
+      cacheFile: cacheFile,
+      client: MockClient((_) async => http.Response('', 500)),
+      serverUri: Uri.parse('ws://localhost:8000/ws/voice'),
+    );
+
+    final options = await bundled.load();
 
     expect(options.optionsVersion, 2);
   });
