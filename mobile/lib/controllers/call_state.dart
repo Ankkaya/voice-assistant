@@ -13,6 +13,8 @@ enum CallPhase {
 
 @immutable
 class CallViewState {
+  static const connectionLostErrorCode = 'CONNECTION_LOST';
+
   const CallViewState({
     this.phase = CallPhase.connecting,
     this.elapsed = Duration.zero,
@@ -37,6 +39,9 @@ class CallViewState {
 
   bool get microphoneEnabled =>
       phase == CallPhase.listening || phase == CallPhase.userSpeaking;
+
+  bool get connectionLost =>
+      phase == CallPhase.error && errorCode == connectionLostErrorCode;
 
   CallViewState copyWith({
     CallPhase? phase,

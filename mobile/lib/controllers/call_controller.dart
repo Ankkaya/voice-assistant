@@ -102,6 +102,7 @@ class CallController extends StateNotifier<CallViewState> {
         state = state.copyWith(phase: CallPhase.listening, clearTurnId: true);
         break;
       case TurnErrorEvent(:final code, :final recoverable, :final message):
+        if (!recoverable) _beginTerminalShutdown();
         state = state.copyWith(
           phase: recoverable ? CallPhase.listening : CallPhase.error,
           errorMessage: message,
@@ -116,7 +117,14 @@ class CallController extends StateNotifier<CallViewState> {
   }
 
   void onSocketError(Object error, [StackTrace? stackTrace]) {
-    state = state.copyWith(phase: CallPhase.error, errorMessage: '通话中断了');
+    if (_shutdownStarted || state.phase == CallPhase.ended) return;
+    _beginTerminalShutdown();
+    state = state.copyWith(
+      phase: CallPhase.error,
+      errorMessage: '通话中断了',
+      errorCode: CallViewState.connectionLostErrorCode,
+      clearTurnId: true,
+    );
   }
 
   void startUserTurn(String turnId) {
@@ -177,6 +185,14 @@ class CallController extends StateNotifier<CallViewState> {
         elapsed: state.elapsed + const Duration(seconds: 1),
       );
     });
+  }
+
+  void _beginTerminalShutdown() {
+    if (_shutdownStarted) return;
+    _shutdownStarted = true;
+    _elapsedTimer?.cancel();
+    _elapsedTimer = null;
+    unawaited(_shutdown());
   }
 
   Future<void> _shutdown() async {

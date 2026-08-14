@@ -90,7 +90,9 @@ class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
     _accepted = !widget.incomingCall;
     _viewState = _controller.viewState;
     _removeStateListener = _controller.addListener((state) {
-      if (mounted) setState(() => _viewState = state);
+      if (!mounted) return;
+      setState(() => _viewState = state);
+      if (state.connectionLost) unawaited(_endCall());
     });
     _audioSubscription = _controller.assistantAudio.listen((chunk) {
       _audioWork = _audioWork.then((_) async {

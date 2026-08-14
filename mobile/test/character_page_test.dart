@@ -340,10 +340,17 @@ void main() {
     await pumpPage(tester, appUpdateService: updates);
     await tester.pumpAndSettle();
 
-    expect(find.text('发现新版本 0.2.0'), findsOneWidget);
-    expect(find.text('当前版本：0.1.0 (1)'), findsOneWidget);
-    expect(find.text('最新版本：0.2.0'), findsOneWidget);
-    expect(find.text('安装包：48.0 MB'), findsOneWidget);
+    expect(find.text('发现新版本'), findsOneWidget);
+    expect(find.text('版本 0.2.0'), findsOneWidget);
+    expect(find.text('0.1.0 → 0.2.0'), findsOneWidget);
+    expect(find.text('48.0 MB'), findsOneWidget);
+    expect(find.text('立即更新'), findsOneWidget);
+    expect(find.byKey(const Key('cancel_app_update')), findsNothing);
+    expect(find.byKey(const Key('close_app_update')), findsOneWidget);
+    expect(
+      tester.widget<AlertDialog>(find.byType(AlertDialog)).actions,
+      hasLength(1),
+    );
     expect(find.byKey(const Key('download_app_update')), findsOneWidget);
   });
 

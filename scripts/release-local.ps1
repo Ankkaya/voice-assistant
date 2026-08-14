@@ -4,6 +4,7 @@ param(
     [ValidatePattern('^v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$')]
     [string]$Tag,
 
+    [string]$ReleaseNotesPath,
     [string]$VoiceServerUrl = $env:VOICE_SERVER_URL,
     [string]$AndroidCertSha256 = $env:ANDROID_CERT_SHA256,
     [string]$SshKeyPath = $env:DEPLOY_SSH_KEY_PATH,
@@ -126,6 +127,21 @@ $mobileDir = Join-Path $repoRoot 'mobile'
 $serverDir = Join-Path $repoRoot 'server'
 $deployDir = Join-Path $repoRoot 'deploy'
 $version = $Tag.Substring(1)
+
+if ([string]::IsNullOrWhiteSpace($ReleaseNotesPath)) {
+    $ReleaseNotesPath = Join-Path $repoRoot "docs\releases\$Tag.md"
+}
+if (-not (Test-Path -LiteralPath $ReleaseNotesPath -PathType Leaf)) {
+    throw "Release notes are required: $ReleaseNotesPath"
+}
+$ReleaseNotesPath = (Resolve-Path -LiteralPath $ReleaseNotesPath).Path
+$releaseNotes = (Get-Content -LiteralPath $ReleaseNotesPath -Raw).Trim()
+if ([string]::IsNullOrWhiteSpace($releaseNotes)) {
+    throw 'Release notes must not be empty.'
+}
+if ($releaseNotes -match '^\s*\*\*Full Changelog\*\*:\s*\S+\s*$') {
+    throw 'Release notes must describe the actual user-facing changes, not only a Full Changelog link.'
+}
 
 if ([string]::IsNullOrWhiteSpace($DeployUser)) { $DeployUser = 'root' }
 if ([string]::IsNullOrWhiteSpace($VoiceServerUrl) -or $VoiceServerUrl -notmatch '^wss://') {
@@ -333,7 +349,7 @@ $releaseArgs = @(
     'release', 'create', $Tag,
     $apkAsset, $aabAsset, $sumsAsset,
     '--repo', $repository,
-    '--generate-notes',
+    '--notes-file', $ReleaseNotesPath,
     '--verify-tag'
 )
 if ($version.Contains('-')) {

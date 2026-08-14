@@ -112,7 +112,52 @@ class _CharacterPageState extends ConsumerState<CharacterPage> {
         context: context,
         builder: (dialogContext) => StatefulBuilder(
           builder: (context, setDialogState) => AlertDialog(
-            title: Text('发现新版本 ${result.release.versionName}'),
+            titlePadding: const EdgeInsets.fromLTRB(24, 20, 12, 0),
+            title: Row(
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Icon(
+                    Icons.system_update_rounded,
+                    color: AppColors.primary,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        '发现新版本',
+                        style: TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '版本 ${result.release.versionName}',
+                        style: const TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  key: const Key('close_app_update'),
+                  tooltip: '暂不更新',
+                  onPressed: openingDownload
+                      ? null
+                      : () => Navigator.of(dialogContext).pop(),
+                  icon: const Icon(Icons.close_rounded),
+                ),
+              ],
+            ),
             content: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 440),
               child: SingleChildScrollView(
@@ -120,13 +165,44 @@ class _CharacterPageState extends ConsumerState<CharacterPage> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('当前版本：${result.currentVersion.displayName}'),
-                    const SizedBox(height: 6),
-                    Text('最新版本：${result.release.versionName}'),
-                    const SizedBox(height: 6),
-                    Text('发布日期：${_formatDate(result.release.publishedAt)}'),
-                    const SizedBox(height: 6),
-                    Text('安装包：${_formatFileSize(result.release.apkSizeBytes)}'),
+                    const Text(
+                      '更新后即可体验最新功能与改进。',
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                        height: 1.45,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceTint,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(14),
+                        child: Column(
+                          children: [
+                            _updateInfoRow(
+                              label: '版本',
+                              value:
+                                  '${result.currentVersion.versionName} → ${result.release.versionName}',
+                            ),
+                            const SizedBox(height: 10),
+                            _updateInfoRow(
+                              label: '发布',
+                              value: _formatDate(result.release.publishedAt),
+                            ),
+                            const SizedBox(height: 10),
+                            _updateInfoRow(
+                              label: '大小',
+                              value: _formatFileSize(
+                                result.release.apkSizeBytes,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                     if (result.release.releaseNotes.isNotEmpty) ...[
                       const SizedBox(height: 18),
                       const Text(
@@ -134,49 +210,65 @@ class _CharacterPageState extends ConsumerState<CharacterPage> {
                         style: TextStyle(fontWeight: FontWeight.w800),
                       ),
                       const SizedBox(height: 8),
-                      Text(result.release.releaseNotes),
+                      DecoratedBox(
+                        decoration: BoxDecoration(
+                          border: Border.all(color: AppColors.outline),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(14),
+                          child: Text(
+                            result.release.releaseNotes,
+                            style: const TextStyle(height: 1.5),
+                          ),
+                        ),
+                      ),
                     ],
                   ],
                 ),
               ),
             ),
+            actionsPadding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
             actions: [
-              TextButton(
-                key: const Key('cancel_app_update'),
-                onPressed: openingDownload
-                    ? null
-                    : () => Navigator.of(dialogContext).pop(),
-                child: const Text('取消'),
-              ),
-              FilledButton(
-                key: const Key('download_app_update'),
-                onPressed: openingDownload
-                    ? null
-                    : () async {
-                        setDialogState(() => openingDownload = true);
-                        final launched = await _appUpdateService.openDownload(
-                          result.release,
-                        );
-                        if (!dialogContext.mounted) return;
-                        if (launched) {
-                          Navigator.of(dialogContext).pop();
-                          return;
-                        }
-                        setDialogState(() => openingDownload = false);
-                        if (!mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('无法打开 GitHub，请稍后重试')),
-                        );
-                      },
-                child: openingDownload
-                    ? const SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Text('从 GitHub 下载'),
+              SizedBox(
+                width: double.maxFinite,
+                child: FilledButton.icon(
+                  key: const Key('download_app_update'),
+                  onPressed: openingDownload
+                      ? null
+                      : () async {
+                          setDialogState(() => openingDownload = true);
+                          final launched = await _appUpdateService.openDownload(
+                            result.release,
+                          );
+                          if (!dialogContext.mounted) return;
+                          if (launched) {
+                            Navigator.of(dialogContext).pop();
+                            return;
+                          }
+                          setDialogState(() => openingDownload = false);
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('无法打开 GitHub，请稍后重试')),
+                          );
+                        },
+                  icon: openingDownload
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.download_rounded),
+                  label: Text(openingDownload ? '正在打开下载…' : '立即更新'),
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size.fromHeight(50),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                ),
               ),
             ],
           ),
@@ -186,6 +278,25 @@ class _CharacterPageState extends ConsumerState<CharacterPage> {
       _updateDialogVisible = false;
     }
   }
+
+  Widget _updateInfoRow({required String label, required String value}) => Row(
+    children: [
+      SizedBox(
+        width: 44,
+        child: Text(
+          label,
+          style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
+        ),
+      ),
+      Expanded(
+        child: Text(
+          value,
+          textAlign: TextAlign.right,
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+      ),
+    ],
+  );
 
   String _formatDate(DateTime value) {
     final local = value.toLocal();

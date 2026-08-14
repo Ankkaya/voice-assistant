@@ -1,10 +1,15 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
+import '../audio/voice_clone_recorder.dart';
 import '../models/character_options.dart';
 import '../models/voice_selection.dart';
 import '../services/character_asset_store.dart';
 import '../theme/app_colors.dart';
+import 'voice_clone_recording_sheet.dart';
 
 class PickedVoiceReference {
   const PickedVoiceReference({
@@ -54,6 +59,8 @@ class VoiceSelector extends StatefulWidget {
     this.enabled = true,
     this.keyPrefix,
     this.onSuggestVoiceDescription,
+    this.voiceRecorder,
+    this.previewPlayer,
     super.key,
   });
 
@@ -64,6 +71,8 @@ class VoiceSelector extends StatefulWidget {
   final bool enabled;
   final String? keyPrefix;
   final Future<String?> Function()? onSuggestVoiceDescription;
+  final VoiceCloneRecorder? voiceRecorder;
+  final VoiceClonePreviewPlayer? previewPlayer;
 
   @override
   State<VoiceSelector> createState() => VoiceSelectorState();
@@ -75,6 +84,8 @@ class VoiceSelectorState extends State<VoiceSelector> {
   late TextEditingController _descriptionController;
   String? _referencePath;
   String? _referenceName;
+  Duration? _referenceDuration;
+  String? _temporaryReferencePath;
   bool _cloneAuthorized = false;
   bool _suggestingVoiceDescription = false;
   String? _errorText;
@@ -110,6 +121,10 @@ class VoiceSelectorState extends State<VoiceSelector> {
   void dispose() {
     _descriptionController.removeListener(_emit);
     _descriptionController.dispose();
+    final temporaryReferencePath = _temporaryReferencePath;
+    if (temporaryReferencePath != null) {
+      unawaited(_deleteTemporaryReference(temporaryReferencePath));
+    }
     super.dispose();
   }
 
@@ -147,15 +162,62 @@ class VoiceSelectorState extends State<VoiceSelector> {
         setState(() => _errorText = '参考音频不能超过 7.5 MB');
         return;
       }
-      setState(() {
-        _referencePath = picked.path;
-        _referenceName = picked.name;
-        _cloneAuthorized = false;
-        _errorText = null;
-      });
-      _emit();
+      await _replaceReference(
+        path: picked.path,
+        name: picked.name,
+        temporary: false,
+      );
     } on FormatException catch (error) {
       if (mounted) setState(() => _errorText = error.message.toString());
+    }
+  }
+
+  Future<void> _recordReference() async {
+    final recording = await showVoiceCloneRecordingSheet(
+      context,
+      recorder: widget.voiceRecorder,
+      previewPlayer: widget.previewPlayer,
+    );
+    if (!mounted || recording == null) return;
+    await _replaceReference(
+      path: recording.path,
+      name: recording.name,
+      duration: recording.duration,
+      temporary: true,
+    );
+  }
+
+  Future<void> _replaceReference({
+    required String path,
+    required String name,
+    required bool temporary,
+    Duration? duration,
+  }) async {
+    final previousTemporary = _temporaryReferencePath;
+    if (previousTemporary != null && previousTemporary != path) {
+      await _deleteTemporaryReference(previousTemporary);
+    }
+    if (!mounted) {
+      if (temporary) await _deleteTemporaryReference(path);
+      return;
+    }
+    setState(() {
+      _referencePath = path;
+      _referenceName = name;
+      _referenceDuration = duration;
+      _temporaryReferencePath = temporary ? path : null;
+      _cloneAuthorized = false;
+      _errorText = null;
+    });
+    _emit();
+  }
+
+  static Future<void> _deleteTemporaryReference(String path) async {
+    try {
+      final file = File(path);
+      if (await file.exists()) await file.delete();
+    } on Object {
+      // Temporary draft cleanup is best effort.
     }
   }
 
@@ -283,12 +345,53 @@ class VoiceSelectorState extends State<VoiceSelector> {
         ],
         if (_mode == VoiceMode.voiceClone) ...[
           const SizedBox(height: 14),
-          OutlinedButton.icon(
-            key: _key('pick_reference'),
-            onPressed: widget.enabled ? _pickReference : null,
-            icon: const Icon(Icons.library_music_rounded),
-            label: Text(_referenceName ?? '选择 WAV / MP3 参考音频'),
-          ),
+          if (_referencePath == null)
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton.icon(
+                    key: _key('record_reference'),
+                    onPressed: widget.enabled ? _recordReference : null,
+                    icon: const Icon(Icons.mic_rounded),
+                    label: const Text('录制声音'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    key: _key('pick_reference'),
+                    onPressed: widget.enabled ? _pickReference : null,
+                    icon: const Icon(Icons.library_music_rounded),
+                    label: const Text('选择音频'),
+                  ),
+                ),
+              ],
+            )
+          else ...[
+            _selectedReference(),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    key: _key('record_reference'),
+                    onPressed: widget.enabled ? _recordReference : null,
+                    icon: const Icon(Icons.mic_rounded),
+                    label: const Text('重新录制'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    key: _key('pick_reference'),
+                    onPressed: widget.enabled ? _pickReference : null,
+                    icon: const Icon(Icons.library_music_rounded),
+                    label: const Text('更换文件'),
+                  ),
+                ),
+              ],
+            ),
+          ],
           CheckboxListTile(
             key: _key('clone_authorized'),
             value: _cloneAuthorized,
@@ -306,7 +409,7 @@ class VoiceSelectorState extends State<VoiceSelector> {
                 : null,
           ),
           const Text(
-            '支持 WAV / MP3，文件不超过 7.5 MB；通话时会临时上传用于音色复刻。',
+            '建议在安静环境中自然说话 10～30 秒；也可选择 WAV / MP3，文件不超过 7.5 MB。录音保存在本机，仅在通话时临时上传。',
             style: TextStyle(color: AppColors.textMuted, fontSize: 12),
           ),
         ],
@@ -319,6 +422,55 @@ class VoiceSelectorState extends State<VoiceSelector> {
         ],
       ],
     );
+  }
+
+  Widget _selectedReference() => DecoratedBox(
+    decoration: BoxDecoration(
+      color: AppColors.surfaceTint,
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(color: AppColors.outline),
+    ),
+    child: Padding(
+      padding: const EdgeInsets.all(12),
+      child: Row(
+        children: [
+          Icon(
+            _referenceDuration == null
+                ? Icons.audio_file_rounded
+                : Icons.mic_rounded,
+            color: AppColors.primary,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _referenceName ?? '参考音频',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                if (_referenceDuration != null)
+                  Text(
+                    '录音时长 ${_formatDuration(_referenceDuration!)}',
+                    style: const TextStyle(
+                      color: AppColors.textMuted,
+                      fontSize: 12,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const Icon(Icons.check_circle_rounded, color: AppColors.primary),
+        ],
+      ),
+    ),
+  );
+
+  static String _formatDuration(Duration duration) {
+    final seconds = duration.inSeconds;
+    return '${(seconds ~/ 60).toString().padLeft(2, '0')}:${(seconds % 60).toString().padLeft(2, '0')}';
   }
 
   Widget _modeChip(VoiceMode mode, String label, IconData icon) {

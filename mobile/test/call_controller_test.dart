@@ -15,6 +15,7 @@ class FakeVoiceSocket implements VoiceSocketClient {
   final audioController = StreamController<Uint8List>.broadcast();
   final sentEvents = <Map<String, Object>>[];
   final sentAudio = <Uint8List>[];
+  int closeCount = 0;
 
   @override
   Stream<Uint8List> get audioChunks => audioController.stream;
@@ -27,7 +28,7 @@ class FakeVoiceSocket implements VoiceSocketClient {
   @override
   void sendEvent(Map<String, Object> event) => sentEvents.add(event);
   @override
-  Future<void> close() async {}
+  Future<void> close() async => closeCount++;
 }
 
 class DelayedConnectSocket extends FakeVoiceSocket {
@@ -224,6 +225,23 @@ void main() {
     expect(controller.state.phase, CallPhase.ended);
     expect(socket.closed, isTrue);
     expect(socket.sentEvents, isEmpty);
+    controller.dispose();
+  });
+
+  test('socket failure stops elapsed time and closes the connection', () async {
+    final socket = FakeVoiceSocket();
+    final controller = CallController(character: character, socket: socket);
+    controller.onEvent(
+      const SessionReady(sessionId: 'session_1', maxDurationSeconds: 300),
+    );
+
+    controller.onSocketError(const VoiceSocketClosed());
+    await Future<void>.delayed(const Duration(milliseconds: 1100));
+
+    expect(controller.state.phase, CallPhase.error);
+    expect(controller.state.connectionLost, isTrue);
+    expect(controller.state.elapsed, Duration.zero);
+    expect(socket.closeCount, 1);
     controller.dispose();
   });
 }

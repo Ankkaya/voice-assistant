@@ -239,6 +239,33 @@ void main() {
     controller.dispose();
   });
 
+  testWidgets('socket interruption cleans up and closes the call page', (
+    tester,
+  ) async {
+    final controller = CallController(
+      character: character,
+      socket: PageTestSocket(),
+    );
+    var cleanedUp = false;
+    var hangupTonePlays = 0;
+    final result = await openCallRoute(
+      tester,
+      controller: controller,
+      incomingCall: false,
+      cleanup: () async => cleanedUp = true,
+      playHangupTone: () async => hangupTonePlays++,
+    );
+
+    controller.onSocketError(const VoiceSocketClosed());
+    await finishCallRoutePop(tester);
+
+    expect(controller.state.connectionLost, isTrue);
+    expect(cleanedUp, isTrue);
+    expect(hangupTonePlays, 0);
+    expect(await result.future, CallPageResult.ended);
+    controller.dispose();
+  });
+
   testWidgets('hangup before connection starts tone, then returns', (
     tester,
   ) async {
