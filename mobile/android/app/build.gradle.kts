@@ -89,6 +89,19 @@ android {
     }
 }
 
+val buildsSingleArm64Apk =
+    providers.gradleProperty("split-per-abi").orNull == "true" &&
+        providers.gradleProperty("target-platform").orNull == "android-arm64"
+if (buildsSingleArm64Apk) {
+    android.applicationVariants.configureEach {
+        val configuredVersionCode = versionCode
+        outputs.configureEach {
+            (this as com.android.build.gradle.api.ApkVariantOutput).versionCodeOverride =
+                configuredVersionCode
+        }
+    }
+}
+
 flutter {
     source = "../.."
 }

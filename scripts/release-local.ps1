@@ -224,7 +224,7 @@ Invoke-Native flutter @('test') $mobileDir
 Write-Host "Building signed Android $version ($buildNumber)..."
 $dartDefine = "VOICE_SERVER_URL=$VoiceServerUrl"
 Invoke-Native flutter @(
-    'build', 'apk', '--release',
+    'build', 'apk', '--release', '--target-platform=android-arm64', '--split-per-abi',
     "--build-name=$version", "--build-number=$buildNumber", "--dart-define=$dartDefine"
 ) $mobileDir
 Invoke-Native flutter @(
@@ -235,13 +235,32 @@ Invoke-Native flutter @(
 $sdkRoot = Get-AndroidSdkRoot
 $aapt = Get-LatestAndroidTool $sdkRoot 'aapt.exe'
 $apksigner = Get-LatestAndroidTool $sdkRoot 'apksigner.bat'
-$apkSource = Join-Path $mobileDir 'build\app\outputs\flutter-apk\app-release.apk'
+$apkSource = Join-Path $mobileDir 'build\app\outputs\flutter-apk\app-arm64-v8a-release.apk'
 $aabSource = Join-Path $mobileDir 'build\app\outputs\bundle\release\app-release.aab'
-$packageLine = ((Invoke-NativeCapture $aapt @('dump', 'badging', $apkSource)) | Select-Object -First 1)
+$badging = @(Invoke-NativeCapture $aapt @('dump', 'badging', $apkSource))
+$packageLine = $badging | Select-Object -First 1
 if ($packageLine -notlike "*name='com.example.childvoice'*" -or
     $packageLine -notlike "*versionName='$version'*" -or
     $packageLine -notlike "*versionCode='$buildNumber'*") {
     throw "Unexpected APK identity or version: $packageLine"
+}
+$apkArchive = [IO.Compression.ZipFile]::OpenRead($apkSource)
+try {
+    $nativeArchitectures = @(
+        $apkArchive.Entries |
+            ForEach-Object {
+                if ($_.FullName -match '^lib/([^/]+)/[^/]+\.so$') {
+                    $Matches[1]
+                }
+            } |
+            Sort-Object -Unique
+    )
+}
+finally {
+    $apkArchive.Dispose()
+}
+if (($nativeArchitectures -join ',') -ne 'arm64-v8a') {
+    throw "Unexpected APK native architectures: $($nativeArchitectures -join ', ')"
 }
 $certOutput = (Invoke-NativeCapture $apksigner @('verify', '--print-certs', $apkSource)) -join "`n"
 $certMatch = [regex]::Match($certOutput, '(?im)certificate SHA-256 digest:\s*([0-9a-f:]+)')
