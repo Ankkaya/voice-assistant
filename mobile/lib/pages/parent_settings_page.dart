@@ -165,65 +165,64 @@ class _ParentSettingsPageState extends ConsumerState<ParentSettingsPage> {
     final hasCatalogWarning =
         catalog.warnings.isNotEmpty || catalog.voiceWarnings.isNotEmpty;
 
-    return ListView(
+    return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
-      children: [
-        if (hasCatalogWarning) ...[
-          const _SettingsWarning(text: '部分本地角色数据无法读取'),
-          const SizedBox(height: 20),
-        ],
-        Text(
-          '选择角色',
-          style: Theme.of(
-            context,
-          ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
-        ),
-        const SizedBox(height: 12),
-        if (catalog.characters.isEmpty)
-          const _NoCharacters()
-        else
-          SizedBox(
-            height: 58,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: catalog.characters.length,
-              separatorBuilder: (_, _) => const SizedBox(width: 8),
-              itemBuilder: (context, index) {
-                final character = catalog.characters[index];
-                return ChoiceChip(
-                  key: Key('settings_character_${character.id}'),
-                  selected: character.id == selected?.id,
-                  onSelected: _saving
-                      ? null
-                      : (_) => _selectCharacter(character.id),
-                  avatar: ClipOval(
-                    child: SizedBox.square(
-                      dimension: 28,
-                      child: CharacterAvatarImage(
-                        avatar: character.avatar,
-                        fallbackColor: character.themeColor,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (hasCatalogWarning) ...[
+            const _SettingsWarning(text: '部分本地角色数据无法读取'),
+            const SizedBox(height: 20),
+          ],
+          Text(
+            '选择角色',
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 12),
+          if (catalog.characters.isEmpty)
+            const _NoCharacters()
+          else
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final character in catalog.characters)
+                  ChoiceChip(
+                    key: Key('settings_character_${character.id}'),
+                    selected: character.id == selected?.id,
+                    onSelected: _saving
+                        ? null
+                        : (_) => _selectCharacter(character.id),
+                    avatar: ClipOval(
+                      child: SizedBox.square(
+                        dimension: 28,
+                        child: CharacterAvatarImage(
+                          avatar: character.avatar,
+                          fallbackColor: character.themeColor,
+                        ),
+                      ),
+                    ),
+                    label: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 132),
+                      child: Text(
+                        character.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ),
-                  label: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 132),
-                    child: Text(
-                      character.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                );
-              },
+              ],
             ),
-          ),
-        const SizedBox(height: 24),
-        if (selected != null) ...[
-          _voiceSettings(catalog, selected),
           const SizedBox(height: 24),
+          if (selected != null) ...[
+            _voiceSettings(catalog, selected),
+            const SizedBox(height: 24),
+          ],
+          _characterManagement(catalog, selected),
         ],
-        _characterManagement(catalog, selected),
-      ],
+      ),
     );
   }
 
@@ -299,6 +298,7 @@ class _ParentSettingsPageState extends ConsumerState<ParentSettingsPage> {
               options: catalog.options.presetVoices,
               initialValue: voice,
               enabled: !_saving,
+              segmented: true,
               onChanged: (_) {},
             ),
             const SizedBox(height: 20),

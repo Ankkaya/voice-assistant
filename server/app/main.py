@@ -6,9 +6,11 @@ from typing import Any
 
 import httpx
 from fastapi import FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
+from pydantic import BaseModel, Field
 
 from .agent import LangChainAgent, build_chat_model
+from .audio import pcm16le_to_wav
 from .character_options import CharacterOptionsRegistry
 from .characters import CharacterRegistry
 from .config import get_settings
@@ -21,6 +23,7 @@ from .protocol import (
 )
 from .providers.asr import XiaomiAsrProvider
 from .providers.tts import XiaomiTtsProvider
+from .models import TtsConfig, TtsMode
 from .safety import SafetyGuard
 from .session import VoiceSession
 from .custom_characters import SessionCharacterResolver
@@ -28,6 +31,15 @@ from .voice_references import MAX_REFERENCE_BYTES, VoiceReferenceStore
 
 
 logger = logging.getLogger(__name__)
+
+
+class VoicePreviewRequest(BaseModel):
+    voice: str = Field(min_length=1, max_length=40)
+    text: str = Field(
+        default="你好呀，我是你的语音伙伴，很高兴认识你。",
+        min_length=1,
+        max_length=120,
+    )
 
 
 @dataclass(slots=True)
@@ -118,6 +130,30 @@ def create_app(injected: AppDependencies | None = None) -> FastAPI:
     async def character_options() -> dict[str, object]:
         dependencies: AppDependencies = app.state.dependencies
         return dependencies.options.public_payload()
+
+    @app.post("/api/voice-preview")
+    async def voice_preview(request: VoicePreviewRequest):
+        dependencies: AppDependencies = app.state.dependencies
+        if not dependencies.ready or dependencies.tts is None:
+            raise HTTPException(503, "Voice preview service is not ready")
+        try:
+            dependencies.options.require_preset_voice(request.voice)
+        except KeyError as exc:
+            raise HTTPException(400, "Unsupported preset voice") from exc
+        try:
+            config = TtsConfig(
+                mode=TtsMode.PRESET,
+                model="mimo-v2.5-tts",
+                voice=request.voice,
+            )
+            chunks = bytearray()
+            async for chunk in dependencies.tts.synthesize(request.text, config):
+                chunks.extend(chunk)
+            wav = pcm16le_to_wav(bytes(chunks), sample_rate=24000, channels=1)
+        except Exception as exc:
+            logger.exception("voice_preview_failed voice=%s", request.voice)
+            raise HTTPException(502, "Voice preview generation failed") from exc
+        return Response(content=wav, media_type="audio/wav")
 
     @app.post(
         "/api/character-suggestions",

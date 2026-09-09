@@ -1,8 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item>
-        <bitmap
-            android:gravity="fill"
-            android:src="@drawable/startup" />
+        <!-- Scale by height only so the bitmap keeps its aspect ratio; the
+             wider image is centered and cropped horizontally on tall phones. -->
+        <scale
+            android:gravity="center"
+            android:scaleWidth="122%"
+            android:scaleHeight="100%">
+            <bitmap android:src="@drawable/startup" />
+        </scale>
     </item>
 </layer-list>

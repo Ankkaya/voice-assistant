@@ -62,6 +62,22 @@ def test_character_options_endpoint():
     assert response.json()["optionsVersion"] == 2
 
 
+def test_voice_preview_endpoint_returns_wav():
+    with TestClient(make_test_app()) as client:
+        response = client.post("/api/voice-preview", json={"voice": "白桦"})
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "audio/wav"
+    assert response.content.startswith(b"RIFF")
+
+
+def test_voice_preview_rejects_unknown_voice():
+    with TestClient(make_test_app()) as client:
+        response = client.post("/api/voice-preview", json={"voice": "unknown"})
+
+    assert response.status_code == 400
+
+
 def test_character_suggestion_endpoint():
     with TestClient(make_test_app()) as client:
         response = client.post(

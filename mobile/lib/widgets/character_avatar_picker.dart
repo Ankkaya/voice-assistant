@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../models/custom_character.dart';
+import '../theme/app_colors.dart';
 import 'character_avatar_image.dart';
 
 abstract interface class AvatarPicker {
@@ -36,6 +37,7 @@ class CharacterAvatarPicker extends StatefulWidget {
     required this.onChanged,
     this.picker,
     this.enabled = true,
+    this.centered = false,
     super.key,
   });
 
@@ -44,6 +46,7 @@ class CharacterAvatarPicker extends StatefulWidget {
   final void Function(CharacterAvatarRef avatar, int colorValue) onChanged;
   final AvatarPicker? picker;
   final bool enabled;
+  final bool centered;
 
   @override
   State<CharacterAvatarPicker> createState() => _CharacterAvatarPickerState();
@@ -76,6 +79,81 @@ class _CharacterAvatarPickerState extends State<CharacterAvatarPicker> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.centered) {
+      return Column(
+        children: [
+          Container(
+            width: 88,
+            height: 88,
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceTint,
+              shape: BoxShape.circle,
+              border: Border.all(color: AppColors.primary, width: 2),
+            ),
+            child: ClipOval(
+              child: CharacterAvatarImage(
+                avatar: _avatar,
+                fallbackColor: Color(_colorValue),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 4,
+            runSpacing: 8,
+            children: [
+              for (final entry in bundledAvatarColors.entries)
+                Semantics(
+                  selected:
+                      _avatar.kind == AvatarKind.bundled &&
+                      _avatar.value == entry.key,
+                  child: IconButton(
+                    key: ValueKey('avatar_${entry.key}'),
+                    tooltip: _label(entry.key),
+                    onPressed: widget.enabled
+                        ? () => _update(
+                            CharacterAvatarRef.bundled(entry.key),
+                            entry.value,
+                          )
+                        : null,
+                    style: IconButton.styleFrom(
+                      minimumSize: const Size(48, 48),
+                      backgroundColor:
+                          _avatar.kind == AvatarKind.bundled &&
+                              _avatar.value == entry.key
+                          ? AppColors.surfaceTint
+                          : const Color(0xFFF9FAFB),
+                      foregroundColor: AppColors.primary,
+                      side: BorderSide(
+                        color:
+                            _avatar.kind == AvatarKind.bundled &&
+                                _avatar.value == entry.key
+                            ? AppColors.primary
+                            : Colors.transparent,
+                        width: 2,
+                      ),
+                    ),
+                    icon: Icon(_icon(entry.key), size: 24),
+                  ),
+                ),
+            ],
+          ),
+          TextButton(
+            key: const Key('avatar_gallery'),
+            onPressed: widget.enabled ? _pickGallery : null,
+            child: const Text(
+              '从相册选择',
+              style: TextStyle(
+                color: AppColors.primary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

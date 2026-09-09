@@ -10,6 +10,7 @@ class CharacterCard extends StatelessWidget {
     required this.onInvite,
     required this.onEdit,
     this.busy = false,
+    this.busyLabel,
     super.key,
   });
 
@@ -17,6 +18,7 @@ class CharacterCard extends StatelessWidget {
   final VoidCallback? onInvite;
   final VoidCallback? onEdit;
   final bool busy;
+  final String? busyLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -121,7 +123,7 @@ class CharacterCard extends StatelessWidget {
                               const SizedBox(width: 7),
                               Flexible(
                                 child: Text(
-                                  busy ? '正在邀请…' : '邀请来电',
+                                  busy ? (busyLabel ?? '正在邀请…') : '邀请来电',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(

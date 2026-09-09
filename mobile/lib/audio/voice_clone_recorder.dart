@@ -185,7 +185,7 @@ final class FlutterSoundVoiceClonePreviewPlayer
     await _player.stopPlayer();
     await _player.startPlayer(
       fromURI: path,
-      codec: Codec.pcm16WAV,
+      codec: path.toLowerCase().endsWith('.mp3') ? Codec.mp3 : Codec.pcm16WAV,
       whenFinished: onFinished,
     );
   }

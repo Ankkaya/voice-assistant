@@ -10,7 +10,7 @@ class VoiceReferenceUploader {
 
   final http.Client _client;
 
-  Future<String> upload(String path) async {
+  Future<String> upload(String path, {String? fileName}) async {
     final socketUri = Uri.parse(defaultVoiceServerUrl);
     final uploadUri = socketUri.replace(
       scheme: socketUri.scheme == 'wss' ? 'https' : 'http',
@@ -19,7 +19,9 @@ class VoiceReferenceUploader {
       fragment: null,
     );
     final request = http.MultipartRequest('POST', uploadUri)
-      ..files.add(await http.MultipartFile.fromPath('file', path));
+      ..files.add(
+        await http.MultipartFile.fromPath('file', path, filename: fileName),
+      );
     final streamed = await _client
         .send(request)
         .timeout(const Duration(seconds: 30));

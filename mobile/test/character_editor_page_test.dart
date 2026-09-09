@@ -127,12 +127,12 @@ void main() {
     await tester.pumpWidget(editorApp());
 
     expect(
-      find.descendant(of: find.byType(AppBar), matching: find.text('基本信息')),
+      find.descendant(of: find.byType(AppBar), matching: find.text('新建角色')),
       findsOneWidget,
     );
-    expect(find.text('基本信息'), findsNWidgets(2));
+    expect(find.text('基本信息'), findsOneWidget);
     expect(find.text('角色设定'), findsOneWidget);
-    expect(find.text('其他信息'), findsOneWidget);
+    expect(find.text('对话与表达'), findsOneWidget);
     expect(find.text('音色设置'), findsOneWidget);
     expect(find.byKey(const Key('character_greeting')), findsOneWidget);
     expect(find.byKey(const Key('character_prompt_profile')), findsOneWidget);
@@ -144,19 +144,24 @@ void main() {
     expect(find.byKey(const Key('suggest_promptProfile')), findsOneWidget);
   });
 
-  testWidgets('new character title follows the visible form section', (
+  testWidgets('new character keeps its title and actions while scrolling', (
     tester,
   ) async {
     await tester.pumpWidget(editorApp());
 
-    for (final section in ['角色设定', '其他信息', '音色设置']) {
+    for (final section in ['角色设定', '对话与表达', '音色设置']) {
       await Scrollable.ensureVisible(
         tester.element(find.text(section)),
         alignment: 0.12,
       );
       await tester.pump();
       expect(
-        find.descendant(of: find.byType(AppBar), matching: find.text(section)),
+        find.descendant(of: find.byType(AppBar), matching: find.text('新建角色')),
+        findsOneWidget,
+      );
+      expect(find.text('取消').hitTestable(), findsOneWidget);
+      expect(
+        find.byKey(const Key('save_character')).hitTestable(),
         findsOneWidget,
       );
     }

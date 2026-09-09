@@ -192,7 +192,7 @@ class DelayedVoiceReferenceUploader extends VoiceReferenceUploader {
   final Completer<void> started = Completer<void>();
 
   @override
-  Future<String> upload(String path) {
+  Future<String> upload(String path, {String? fileName}) {
     if (!started.isCompleted) started.complete();
     return result.future;
   }

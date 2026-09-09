@@ -37,6 +37,7 @@ class _CharacterPageState extends ConsumerState<CharacterPage> {
   late final AppUpdateService _appUpdateService;
   late final bool _ownsAppUpdateService;
   String? _busyCharacterId;
+  String? _busyLabel;
   AppVersion? _appVersion;
   bool _checkingUpdate = false;
   bool _updateDialogVisible = false;
@@ -330,11 +331,15 @@ class _CharacterPageState extends ConsumerState<CharacterPage> {
 
   Future<void> _startCall(Character character) async {
     if (_busyCharacterId != null) return;
-    setState(() => _busyCharacterId = character.id);
+    setState(() {
+      _busyCharacterId = character.id;
+      _busyLabel = '正在准备…';
+    });
     try {
       final catalog = ref.read(charactersProvider).requireValue;
       var selection = catalog.voiceFor(character);
       if (selection.mode == VoiceMode.voiceClone) {
+        if (mounted) setState(() => _busyLabel = '正在上传声音…');
         final path = selection.referencePath;
         final exists =
             path != null &&
@@ -342,9 +347,12 @@ class _CharacterPageState extends ConsumerState<CharacterPage> {
         if (!exists) {
           selection = _safePresetVoice(catalog, character);
         } else {
-          selection = selection.withReferenceId(await _uploader.upload(path));
+          selection = selection.withReferenceId(
+            await _uploader.upload(path, fileName: selection.referenceName),
+          );
         }
       }
+      if (mounted) setState(() => _busyLabel = '正在连接…');
       if (!mounted || ModalRoute.of(context)?.isCurrent != true) return;
       final result = await Navigator.of(context).push<CallPageResult>(
         MaterialPageRoute<CallPageResult>(
@@ -357,11 +365,22 @@ class _CharacterPageState extends ConsumerState<CharacterPage> {
       }
     } on Object {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('现在还邀请不了，请稍后再试')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('声音准备失败，请重试'),
+          action: SnackBarAction(
+            label: '重试',
+            onPressed: () => _startCall(character),
+          ),
+        ),
+      );
     } finally {
-      if (mounted) setState(() => _busyCharacterId = null);
+      if (mounted) {
+        setState(() {
+          _busyCharacterId = null;
+          _busyLabel = null;
+        });
+      }
     }
   }
 
@@ -426,6 +445,7 @@ class _CharacterPageState extends ConsumerState<CharacterPage> {
                       CharacterCard(
                         character: catalog.characters[index],
                         busy: _busyCharacterId == catalog.characters[index].id,
+                        busyLabel: _busyLabel,
                         onInvite: _busyCharacterId == null
                             ? () => _startCall(catalog.characters[index])
                             : null,

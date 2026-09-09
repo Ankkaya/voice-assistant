@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -126,11 +128,38 @@ class VoiceCallApp extends StatelessWidget {
   }
 }
 
-class _AppHome extends ConsumerWidget {
+class _AppHome extends ConsumerStatefulWidget {
   const _AppHome();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_AppHome> createState() => _AppHomeState();
+}
+
+class _AppHomeState extends ConsumerState<_AppHome> {
+  static const _minimumSplashDuration = Duration(milliseconds: 1500);
+  Timer? _splashTimer;
+  bool _minimumSplashElapsed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _splashTimer = Timer(_minimumSplashDuration, () {
+        if (mounted) setState(() => _minimumSplashElapsed = true);
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _splashTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_minimumSplashElapsed) return const StartupPage();
     final catalog = ref.watch(charactersProvider);
     if (catalog.isLoading && !catalog.hasValue) {
       return const StartupPage();

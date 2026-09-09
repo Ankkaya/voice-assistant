@@ -462,7 +462,7 @@ void main() {
 
     expect(find.byType(CharacterEditorPage), findsOneWidget);
     expect(
-      find.descendant(of: find.byType(AppBar), matching: find.text('基本信息')),
+      find.descendant(of: find.byType(AppBar), matching: find.text('新建角色')),
       findsOneWidget,
     );
   });
