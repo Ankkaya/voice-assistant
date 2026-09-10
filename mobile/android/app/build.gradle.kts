@@ -6,6 +6,10 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+dependencies {
+    implementation("androidx.core:core-splashscreen:1.0.1")
+}
+
 val localSigningProperties = Properties()
 val localSigningPropertiesFile = rootProject.file("key.properties")
 if (localSigningPropertiesFile.exists()) {

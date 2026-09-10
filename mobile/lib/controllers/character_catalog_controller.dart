@@ -97,10 +97,18 @@ class CharacterCatalogController extends AsyncNotifier<CharacterCatalogState> {
     _dependencies = await ref.watch(
       characterCatalogDependenciesProvider.future,
     );
-    final bundled = await _dependencies.bundled.load();
-    final custom = await _dependencies.custom.loadWithWarnings();
-    final options = await _dependencies.options.load();
-    final loadedVoices = await _dependencies.voices.load();
+    // These are all local reads and do not depend on each other. Loading them
+    // together keeps the first Flutter page from waiting on them in series.
+    final results = await Future.wait<Object?>([
+      _dependencies.bundled.load(),
+      _dependencies.custom.loadWithWarnings(),
+      _dependencies.options.load(),
+      _dependencies.voices.load(),
+    ]);
+    final bundled = results[0]! as List<Character>;
+    final custom = results[1]! as CharacterLoadResult;
+    final options = results[2]! as CharacterOptions;
+    final loadedVoices = results[3]! as VoicePreferencesLoadResult;
     final characters = [...bundled, ...custom.characters];
     final validIds = characters.map((character) => character.id).toSet();
     final voicePreferences = <String, VoiceSelection>{
@@ -118,7 +126,12 @@ class CharacterCatalogController extends AsyncNotifier<CharacterCatalogState> {
           (warning) => warning != VoicePreferenceWarning.invalidStore,
         ),
     };
+    // Cleanup and the network refresh are deliberately outside the startup
+    // path. The cached/local values above are enough to render the home page.
     unawaited(_dependencies.voices.prune(validIds));
+    // Defer one event-loop turn so the local state is available to
+    // refreshOptions(), while keeping the network request off the startup
+    // path.
     unawaited(Future<void>.delayed(Duration.zero, refreshOptions));
     return CharacterCatalogState(
       characters: characters,

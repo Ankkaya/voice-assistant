@@ -1,16 +1,27 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'controllers/character_catalog_controller.dart';
 import 'pages/character_editor_page.dart';
 import 'pages/character_page.dart';
-import 'pages/startup_page.dart';
+import 'pages/app_startup_page.dart';
 import 'theme/app_colors.dart';
 
 class VoiceCallApp extends StatelessWidget {
   const VoiceCallApp({super.key});
+
+  static const _appSystemUiOverlayStyle = SystemUiOverlayStyle(
+    statusBarColor: AppColors.background,
+    statusBarIconBrightness: Brightness.dark,
+    statusBarBrightness: Brightness.light,
+    systemNavigationBarColor: AppColors.background,
+    systemNavigationBarDividerColor: AppColors.background,
+    systemNavigationBarIconBrightness: Brightness.dark,
+    systemNavigationBarContrastEnforced: false,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -123,6 +134,10 @@ class VoiceCallApp extends StatelessWidget {
           ),
         ),
       ),
+      builder: (context, child) => AnnotatedRegion<SystemUiOverlayStyle>(
+        value: _appSystemUiOverlayStyle,
+        child: child ?? const SizedBox.shrink(),
+      ),
       home: const _AppHome(),
     );
   }
@@ -136,33 +151,32 @@ class _AppHome extends ConsumerStatefulWidget {
 }
 
 class _AppHomeState extends ConsumerState<_AppHome> {
-  static const _minimumSplashDuration = Duration(milliseconds: 1500);
-  Timer? _splashTimer;
-  bool _minimumSplashElapsed = false;
+  static const _minimumStartupDuration = Duration(milliseconds: 400);
+  Timer? _startupTimer;
+  bool _startupDurationElapsed = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      _splashTimer = Timer(_minimumSplashDuration, () {
-        if (mounted) setState(() => _minimumSplashElapsed = true);
+      _startupTimer = Timer(_minimumStartupDuration, () {
+        if (mounted) setState(() => _startupDurationElapsed = true);
       });
     });
   }
 
   @override
   void dispose() {
-    _splashTimer?.cancel();
+    _startupTimer?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    if (!_minimumSplashElapsed) return const StartupPage();
     final catalog = ref.watch(charactersProvider);
-    if (catalog.isLoading && !catalog.hasValue) {
-      return const StartupPage();
+    if (!_startupDurationElapsed || catalog.isLoading && !catalog.hasValue) {
+      return const AppStartupPage();
     }
     return CharacterPage(
       characterSettingsBuilder: (_, character) =>
