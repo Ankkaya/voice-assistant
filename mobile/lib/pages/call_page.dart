@@ -1,8 +1,8 @@
 import 'dart:async';
-import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:uuid/uuid.dart';
 
 import '../audio/audio_capture.dart';
@@ -53,6 +53,16 @@ class CallPage extends StatefulWidget {
 }
 
 class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
+  static const _callSystemUiOverlayStyle = SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: Brightness.light,
+    statusBarBrightness: Brightness.dark,
+    systemNavigationBarColor: Colors.transparent,
+    systemNavigationBarDividerColor: Colors.transparent,
+    systemNavigationBarIconBrightness: Brightness.light,
+    systemNavigationBarContrastEnforced: false,
+  );
+
   late final CallController _controller;
   late final bool _ownsController;
   late final AudioCapture _capture;
@@ -75,6 +85,7 @@ class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    unawaited(_setSystemUiMode(SystemUiMode.edgeToEdge));
     WidgetsBinding.instance.addObserver(this);
     _ownsController = widget.controller == null;
     _controller =
@@ -290,6 +301,9 @@ class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    unawaited(
+      _setSystemUiMode(SystemUiMode.manual, overlays: SystemUiOverlay.values),
+    );
     WidgetsBinding.instance.removeObserver(this);
     _removeStateListener?.call();
     unawaited(_captureSubscription?.cancel());
@@ -303,7 +317,7 @@ class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    return PopScope(
+    final page = PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) unawaited(_endCall());
@@ -454,6 +468,21 @@ class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
         ),
       ),
     );
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: _callSystemUiOverlayStyle,
+      child: page,
+    );
+  }
+
+  Future<void> _setSystemUiMode(
+    SystemUiMode mode, {
+    List<SystemUiOverlay>? overlays,
+  }) async {
+    try {
+      await SystemChrome.setEnabledSystemUIMode(mode, overlays: overlays);
+    } on Object {
+      // System UI calls are unavailable in widget tests and should not block a call.
+    }
   }
 
   String _formatDuration(Duration value) {
