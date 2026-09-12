@@ -3,14 +3,17 @@ from typing import Any
 import pytest
 from langchain_core.language_models.chat_models import SimpleChatModel
 from langchain_core.messages import BaseMessage
+from pydantic import SecretStr
 
-from app.agent import ConversationTurn, LangChainAgent
+from app.agent import ConversationTurn, LangChainAgent, build_chat_model
+from app.config import Settings
 from app.safety import SafetyGuard
 
 
 class RecordingChatModel(SimpleChatModel):
     response: str = "好的，我们一起想想吧！"
     last_messages: list[BaseMessage] = []
+    last_kwargs: dict[str, Any] = {}
 
     @property
     def _llm_type(self) -> str:
@@ -24,7 +27,22 @@ class RecordingChatModel(SimpleChatModel):
         **kwargs: Any,
     ) -> str:
         self.last_messages = messages
+        self.last_kwargs = kwargs
         return self.response
+
+
+def test_chat_model_disables_reasoning_for_low_latency_replies():
+    model = build_chat_model(
+        Settings(
+            _env_file=None,
+            llm_model="mimo-v2.5",
+            llm_base_url="https://example.com/v1",
+            llm_api_key=SecretStr("test-key"),
+        )
+    )
+
+    assert model.max_tokens == 1024
+    assert model.extra_body == {"thinking": {"type": "disabled"}}
 
 
 @pytest.mark.asyncio
@@ -43,6 +61,7 @@ async def test_agent_keeps_only_eight_turns(registry):
     assert len(ai_messages) == 8
     assert "问题0" not in " ".join(str(message.content) for message in model.last_messages)
     assert result == "好的，我们一起想想吧！"
+    assert model.last_kwargs["max_tokens"] == 256
 
 
 @pytest.mark.asyncio

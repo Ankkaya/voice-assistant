@@ -89,7 +89,7 @@ class LangChainAgent:
                 ("human", "{user_text}"),
             ]
         )
-        chain = prompt | self._model | StrOutputParser()
+        chain = prompt | self._model.bind(max_tokens=256) | StrOutputParser()
         raw = await chain.ainvoke(
             {
                 "history": self._history_messages(history[-8:]),
@@ -154,10 +154,8 @@ def build_chat_model(settings: Settings) -> BaseChatModel:
         api_key=settings.llm_api_key.get_secret_value(),
         base_url=settings.llm_base_url,
         temperature=0.6,
-        # Reasoning models may spend part of this budget before emitting the
-        # visible answer. Final user-facing text is still bounded by the
-        # per-reply and per-suggestion character limits above.
         max_tokens=1024,
+        extra_body={"thinking": {"type": "disabled"}},
         timeout=30.0,
         max_retries=0,
     )
