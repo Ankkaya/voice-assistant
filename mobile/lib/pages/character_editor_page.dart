@@ -126,7 +126,7 @@ class _CharacterEditorPageState extends ConsumerState<CharacterEditorPage> {
     final detail = description.isEmpty
         ? character.displaySubtitle
         : description;
-    return '你是${character.name}，$detail。与 6–9 岁儿童对话时使用简短、积极、易懂的中文，保持温暖、耐心，并鼓励孩子提问。';
+    return '你是${character.name}，$detail。与3到6岁儿童对话时使用简短、积极、易懂的中文，保持温暖、耐心，并鼓励孩子提问。';
   }
 
   void _updateDefaultGreeting() {

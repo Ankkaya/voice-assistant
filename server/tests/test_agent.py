@@ -65,6 +65,41 @@ async def test_agent_keeps_only_eight_turns(registry):
 
 
 @pytest.mark.asyncio
+async def test_agent_prompt_targets_younger_children_without_ai_identity_declaration(
+    registry,
+):
+    model = RecordingChatModel()
+    agent = LangChainAgent(model, SafetyGuard())
+
+    await agent.reply(registry.get("ryder"), [], "你好")
+
+    system_text = str(model.last_messages[0].content)
+    assert "3到6岁" in system_text
+    assert "AI卡通角色" not in system_text
+
+
+@pytest.mark.asyncio
+async def test_agent_accepts_custom_character_profile_with_json_braces(registry):
+    model = RecordingChatModel()
+    agent = LangChainAgent(model, SafetyGuard())
+    character = registry.get("ryder").model_copy(
+        update={
+            "prompt_profile": (
+                '角色资料：{"displayName": "阳光小精灵", '
+                '"promptProfile": "说话轻快"}'
+            )
+        }
+    )
+
+    result = await agent.reply(character, [], "陪我探索星星吧")
+
+    assert result == "好的，我们一起想想吧！"
+    system_text = str(model.last_messages[0].content)
+    assert '"displayName": "阳光小精灵"' in system_text
+    assert '"promptProfile": "说话轻快"' in system_text
+
+
+@pytest.mark.asyncio
 async def test_agent_does_not_call_model_for_blocked_input(registry):
     model = RecordingChatModel()
     agent = LangChainAgent(model, SafetyGuard())

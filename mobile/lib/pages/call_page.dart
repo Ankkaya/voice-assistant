@@ -269,6 +269,10 @@ class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
         ),
       );
     }
+    // Restore the home page system-bar mode before popping the route. Doing
+    // this from dispose() updates MediaQuery after the home page is visible,
+    // which causes a brief SafeArea re-layout on Android.
+    await _restoreHomeSystemUi();
     if (mounted) Navigator.of(context).pop(result);
   }
 
@@ -301,9 +305,6 @@ class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
 
   @override
   void dispose() {
-    unawaited(
-      _setSystemUiMode(SystemUiMode.manual, overlays: SystemUiOverlay.values),
-    );
     WidgetsBinding.instance.removeObserver(this);
     _removeStateListener?.call();
     unawaited(_captureSubscription?.cancel());
@@ -484,6 +485,9 @@ class _CallPageState extends State<CallPage> with WidgetsBindingObserver {
       // System UI calls are unavailable in widget tests and should not block a call.
     }
   }
+
+  Future<void> _restoreHomeSystemUi() =>
+      _setSystemUiMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
 
   String _formatDuration(Duration value) {
     final minutes = value.inMinutes.remainder(60).toString().padLeft(2, '0');

@@ -101,7 +101,7 @@ class SessionCharacterResolver:
         interest_text = "、".join(option.prompt_text for option in interests)
         interest_rule = f"兴趣方向：{interest_text}。" if interest_text else ""
         return (
-            f"你扮演一个名为{spec.display_name}的AI卡通角色。"
+            f"你扮演一个名为{spec.display_name}的卡通角色。"
             f"角色身份：{identity.prompt_text}。"
             f"性格特点：{trait_text}。"
             f"{interest_rule}"

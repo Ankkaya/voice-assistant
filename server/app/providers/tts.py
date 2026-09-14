@@ -123,7 +123,7 @@ class XiaomiTtsProvider:
             raise ProviderError("tts", "EMPTY_RESULT")
 
     def _request_body(self, text: str, config: TtsConfig) -> dict:
-        style = "使用适合6到9岁儿童的温暖、清晰、自然语气，语速适中。"
+        style = "使用适合3到6岁儿童的温暖、清晰、自然语气，语速适中。"
         audio: dict[str, object] = {"format": "pcm16"}
         if config.mode is TtsMode.PRESET:
             messages = [

@@ -174,8 +174,11 @@ class _AppHomeState extends ConsumerState<_AppHome> {
 
   @override
   Widget build(BuildContext context) {
+    // Let the first Flutter frame paint the startup surface before kicking
+    // off the local catalog initialization.
+    if (!_startupDurationElapsed) return const AppStartupPage();
     final catalog = ref.watch(charactersProvider);
-    if (!_startupDurationElapsed || catalog.isLoading && !catalog.hasValue) {
+    if (catalog.isLoading && !catalog.hasValue) {
       return const AppStartupPage();
     }
     return CharacterPage(
