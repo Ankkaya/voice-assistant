@@ -1,11 +1,12 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:child_voice_call/audio/audio_player.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 final class FakePcmAudioOutput implements PcmAudioOutput {
   final events = <String>[];
+  final fedBytes = BytesBuilder(copy: false);
 
   @override
   Future<void> open() async => events.add('open');
@@ -18,6 +19,7 @@ final class FakePcmAudioOutput implements PcmAudioOutput {
   @override
   Future<void> feed(Uint8List bytes) async {
     events.add('feed:${bytes.lengthInBytes}');
+    fedBytes.add(bytes);
   }
 
   @override
@@ -81,7 +83,7 @@ void main() {
 
       await player.finish();
 
-      expect(delays, [const Duration(milliseconds: 3700)]);
+      expect(delays, [const Duration(milliseconds: 4400)]);
       expect(output.events.first, 'open');
       expect(output.events[1], 'start:24000');
       expect(
@@ -110,23 +112,77 @@ void main() {
       await player.feed(Uint8List(4800));
       await player.finish();
 
-      expect(delays, [const Duration(milliseconds: 180)]);
+      expect(delays, [const Duration(milliseconds: 280)]);
     },
   );
+
+  test('prebuffers enough PCM to absorb a multi-second stream gap', () async {
+    final output = FakePcmAudioOutput();
+    var now = DateTime(2026);
+    final player = PcmAudioPlayer(output: output, clock: () => now);
+
+    await player.start(24000);
+    for (var index = 0; index < 24; index++) {
+      await player.feed(Uint8List(4800));
+      now = now.add(const Duration(milliseconds: 100));
+    }
+    expect(output.events, ['open']);
+
+    await player.feed(Uint8List(4800));
+    expect(output.events.first, 'open');
+    expect(output.events[1], 'start:24000');
+    expect(output.events.where((event) => event == 'feed:4800'), hasLength(25));
+
+    now = now.add(const Duration(seconds: 2));
+    await player.feed(Uint8List(4800));
+    expect(output.events.last, 'feed:4800');
+  });
+
+  test('splits oversized PCM chunks to respect native backpressure', () async {
+    final output = FakePcmAudioOutput();
+    final player = PcmAudioPlayer(output: output);
+    final pcm = Uint8List.fromList(
+      List<int>.generate(120000, (index) => index & 0xff),
+    );
+
+    await player.start(24000);
+    await player.feed(pcm);
+
+    expect(output.events, [
+      'open',
+      'start:24000',
+      'feed:16384',
+      'feed:16384',
+      'feed:16384',
+      'feed:16384',
+      'feed:16384',
+      'feed:16384',
+      'feed:16384',
+      'feed:5312',
+    ]);
+    expect(output.fedBytes.takeBytes(), pcm);
+  });
 
   test('start stops a previous stream and resets its drain tracking', () async {
     final output = FakePcmAudioOutput();
     final player = PcmAudioPlayer(output: output);
 
     await player.start(24000);
-    await player.feed(Uint8List(4800));
+    await player.feed(Uint8List(120000));
     await player.start(16000);
     await player.dispose();
 
     expect(output.events, [
       'open',
       'start:24000',
-      'feed:4800',
+      'feed:16384',
+      'feed:16384',
+      'feed:16384',
+      'feed:16384',
+      'feed:16384',
+      'feed:16384',
+      'feed:16384',
+      'feed:5312',
       'stop',
       'close',
     ]);

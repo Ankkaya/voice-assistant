@@ -33,7 +33,7 @@ final class FlutterSoundPcmAudioOutput implements PcmAudioOutput {
       numChannels: 1,
       sampleRate: sampleRate,
       interleaved: true,
-      bufferSize: 4096,
+      bufferSize: 16384,
     );
   }
 
@@ -58,8 +58,12 @@ class PcmAudioPlayer {
        _clock = clock ?? DateTime.now,
        _delay = delay ?? Future<void>.delayed;
 
-  static const _prebufferDuration = Duration(milliseconds: 100);
+  // MiMo's streaming response can arrive in multi-second bursts on Android.
+  // Keep enough decoded PCM queued before starting AudioTrack so those gaps do
+  // not drain the native buffer and force an audible underrun/restart.
+  static const _prebufferDuration = Duration(milliseconds: 2500);
   static const _playbackTail = Duration(milliseconds: 80);
+  static const _feedBufferBytes = 16384;
 
   final PcmAudioOutput _output;
   final DateTime Function() _clock;
@@ -144,9 +148,21 @@ class PcmAudioPlayer {
   }
 
   Future<void> _feedToOutput(Uint8List bytes, int generation) async {
-    if (generation != _generation) return;
-    await _output.feed(bytes);
-    if (generation != _generation) return;
+    var offset = 0;
+    while (offset < bytes.lengthInBytes) {
+      if (generation != _generation) return;
+      final end = (offset + _feedBufferBytes).clamp(
+        0,
+        bytes.lengthInBytes,
+      );
+      final buffer = Uint8List.sublistView(bytes, offset, end);
+      await _output.feed(buffer);
+      if (generation != _generation) return;
+      // flutter_sound's Android callback returns a completion signal (always
+      // 1), not the number of accepted bytes. The blocking AudioTrack write
+      // has completed for the whole buffer at this point.
+      offset = end;
+    }
     final now = _clock();
     final previousEnd = _expectedPlaybackEnd;
     final startsAt = previousEnd != null && previousEnd.isAfter(now)
