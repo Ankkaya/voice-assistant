@@ -360,7 +360,7 @@ void main() {
     final output = PageTestPcmOutput();
     final player = PcmAudioPlayer(output: output);
     await player.start(24000);
-    await player.feed(Uint8List(4800));
+    await player.feed(Uint8List(120000));
     final controller = CallController(
       character: character,
       socket: PageTestSocket(),
