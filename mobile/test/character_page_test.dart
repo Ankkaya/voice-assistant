@@ -325,7 +325,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(updates.checkCount, 1);
-    expect(find.text('版本 0.1.0 (1)'), findsOneWidget);
+    expect(find.text('版本 0.1.0'), findsOneWidget);
     expect(find.bySemanticsLabel('当前版本 0.1.0，点击检查更新'), findsOneWidget);
     semantics.dispose();
   });
@@ -423,7 +423,7 @@ void main() {
 
     blocker.complete(fakeUpdateResult());
     await tester.pumpAndSettle();
-    expect(find.text('版本 0.1.0 (1)'), findsOneWidget);
+    expect(find.text('版本 0.1.0'), findsOneWidget);
   });
 
   testWidgets('shows the child invitation contract for every character', (

@@ -486,7 +486,7 @@ class _CharacterPageState extends ConsumerState<CharacterPage> {
         ? '正在检查更新…'
         : version == null
         ? '版本信息加载中…'
-        : '版本 ${version.displayName}';
+        : '版本 ${version.versionName}';
     final semanticsLabel = version == null
         ? label
         : '当前版本 ${version.versionName}，点击检查更新';
